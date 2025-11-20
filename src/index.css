@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  /* Custom spacing */
+  --spacing-18: 4.5rem;
+  --spacing-22: 5.5rem;
+
+  /* Custom font sizes with line heights */
+  --font-size-xs: 0.75rem;
+  --font-size-xs--line-height: 1rem;
+
+  --font-size-sm: 0.875rem;
+  --font-size-sm--line-height: 1.25rem;
+
+  --font-size-base: 1rem;
+  --font-size-base--line-height: 1.5rem;
+
+  --font-size-lg: 1.125rem;
+  --font-size-lg--line-height: 1.75rem;
+
+  --font-size-xl: 1.25rem;
+  --font-size-xl--line-height: 1.75rem;
+
+  --font-size-2xl: 1.5rem;
+  --font-size-2xl--line-height: 2rem;
+
+  --font-size-3xl: 1.875rem;
+  --font-size-3xl--line-height: 2.25rem;
+
+  --font-size-4xl: 2.25rem;
+  --font-size-4xl--line-height: 2.5rem;
+}
+
+/* Base styles */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}

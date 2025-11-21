@@ -1,5 +1,5 @@
 // Daily Entry Section Components
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { DailyEntryBundle } from '../../types/db';
 import {
   upsertSleepBlock,
@@ -18,6 +18,11 @@ import {
   deleteMedicationIntake,
   addSymptomLog,
   deleteSymptomLog,
+  upsertCycleLog,
+  getOrCreateCycleLog,
+  getCycleSavedSymptoms,
+  addCycleSymptom,
+  addCycleComment,
 } from '../../lib/api/dailyEntry';
 
 // Reusable section wrapper
@@ -1537,84 +1542,395 @@ export function SymptomsSection({
 // CYCLE TRACKING SECTION
 // ============================================================================
 
-export function CycleSection({ data }: { data: DailyEntryBundle }) {
+export function CycleSection({
+  data,
+  editable,
+  onRefresh,
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void;
+}) {
   const cycleLog = data.cycleLog;
   const comments = data.cycleComments;
 
-  if (!cycleLog) {
+  // Helper to generate key from label
+  const generateKey = (label: string) => {
+    return label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  };
+
+  // Saved symptoms state
+  const [savedPhysicalSymptoms, setSavedPhysicalSymptoms] = useState<any[]>([]);
+  const [savedEmotionalSymptoms, setSavedEmotionalSymptoms] = useState<any[]>([]);
+
+  // Form data state
+  const [formData, setFormData] = useState({
+    cycle_day: cycleLog?.cycle_day || '',
+    physical_symptom_keys: cycleLog?.physical_symptom_keys || [],
+    emotional_symptom_keys: cycleLog?.emotional_symptom_keys || [],
+    bleeding_quantity: cycleLog?.bleeding_quantity || '',
+    blood_color: cycleLog?.blood_color || '',
+    blood_volume: cycleLog?.blood_volume || '',
+    clots: cycleLog?.clots || false,
+    mucus: cycleLog?.mucus || false,
+  });
+
+  // New symptom inputs
+  const [newPhysicalSymptom, setNewPhysicalSymptom] = useState('');
+  const [newEmotionalSymptom, setNewEmotionalSymptom] = useState('');
+
+  // Load saved symptoms on mount
+  useEffect(() => {
+    if (editable) {
+      const loadSymptoms = async () => {
+        try {
+          const physical = await getCycleSavedSymptoms(data.dailyEntry.patient_id, 'cycle_physical');
+          const emotional = await getCycleSavedSymptoms(data.dailyEntry.patient_id, 'cycle_emotional');
+          setSavedPhysicalSymptoms(physical);
+          setSavedEmotionalSymptoms(emotional);
+        } catch (error) {
+          console.error('Failed to load saved symptoms:', error);
+        }
+      };
+      loadSymptoms();
+    }
+  }, [editable, data.dailyEntry.patient_id]);
+
+  // Autosave handler
+  const handleSave = useCallback(async (updates?: Partial<typeof formData>) => {
+    const dataToSave = updates || formData;
+    try {
+      if (!cycleLog) {
+        // Create new cycle log
+        const newLog = await getOrCreateCycleLog(data.dailyEntry.id, data.dailyEntry.patient_id);
+        await upsertCycleLog({
+          id: newLog.id,
+          daily_entry_id: data.dailyEntry.id,
+          patient_id: data.dailyEntry.patient_id,
+          ...dataToSave,
+          cycle_day: dataToSave.cycle_day ? parseInt(String(dataToSave.cycle_day)) : undefined,
+          blood_volume: dataToSave.blood_volume ? String(dataToSave.blood_volume) : undefined,
+        });
+      } else {
+        await upsertCycleLog({
+          id: cycleLog.id,
+          daily_entry_id: data.dailyEntry.id,
+          patient_id: data.dailyEntry.patient_id,
+          ...dataToSave,
+          cycle_day: dataToSave.cycle_day ? parseInt(String(dataToSave.cycle_day)) : undefined,
+          blood_volume: dataToSave.blood_volume ? String(dataToSave.blood_volume) : undefined,
+        });
+      }
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to save cycle log:', error);
+    }
+  }, [formData, cycleLog, data.dailyEntry.id, data.dailyEntry.patient_id, onRefresh]);
+
+  // Toggle symptom checkbox
+  const toggleSymptom = useCallback((key: string, category: 'physical' | 'emotional') => {
+    const field = category === 'physical' ? 'physical_symptom_keys' : 'emotional_symptom_keys';
+    const currentKeys = formData[field] || [];
+    const newKeys = currentKeys.includes(key)
+      ? currentKeys.filter((k: string) => k !== key)
+      : [...currentKeys, key];
+
+    const updated = { ...formData, [field]: newKeys };
+    setFormData(updated);
+    handleSave(updated);
+  }, [formData, handleSave]);
+
+  // Add new symptom
+  const handleAddSymptom = useCallback(async (category: 'cycle_physical' | 'cycle_emotional') => {
+    const label = category === 'cycle_physical' ? newPhysicalSymptom : newEmotionalSymptom;
+    if (!label.trim()) return;
+
+    try {
+      const key = generateKey(label.trim());
+      await addCycleSymptom({
+        patient_id: data.dailyEntry.patient_id,
+        category,
+        label: label.trim(),
+      });
+
+      // Reload symptoms
+      const symptoms = await getCycleSavedSymptoms(data.dailyEntry.patient_id, category);
+      if (category === 'cycle_physical') {
+        setSavedPhysicalSymptoms(symptoms);
+        setNewPhysicalSymptom('');
+      } else {
+        setSavedEmotionalSymptoms(symptoms);
+        setNewEmotionalSymptom('');
+      }
+
+      // Auto-select the new symptom
+      toggleSymptom(key, category === 'cycle_physical' ? 'physical' : 'emotional');
+    } catch (error) {
+      console.error('Failed to add symptom:', error);
+    }
+  }, [newPhysicalSymptom, newEmotionalSymptom, data.dailyEntry.patient_id, toggleSymptom]);
+
+  if (!editable && !cycleLog) {
     return <Section title="Cycle Tracking"><NoData message="No cycle data logged" /></Section>;
   }
 
   return (
     <Section title="Cycle Tracking">
-      <div className="space-y-4">
-        {/* Cycle Day */}
-        {cycleLog.cycle_day && (
-          <div className="text-sm">
-            <span className="font-medium">Cycle Day:</span> {cycleLog.cycle_day}
+      {editable ? (
+        <div className="space-y-4">
+          {/* Cycle Day Input */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Cycle Day</label>
+            <input
+              type="number"
+              min="1"
+              value={formData.cycle_day}
+              onChange={(e) => setFormData({ ...formData, cycle_day: e.target.value })}
+              onBlur={() => handleSave()}
+              placeholder="Enter cycle day (1-40)"
+              className="w-32 px-3 py-2 border rounded text-sm"
+            />
           </div>
-        )}
 
-        {/* Physical Symptoms */}
-        {cycleLog.physical_symptom_keys && cycleLog.physical_symptom_keys.length > 0 && (
+          {/* Physical Symptoms Checkboxes */}
           <div>
             <h4 className="font-medium text-sm mb-2">Physical Symptoms:</h4>
-            <div className="flex flex-wrap gap-2">
-              {cycleLog.physical_symptom_keys.map((key) => (
-                <span key={key} className="px-2 py-1 bg-blue-100 rounded text-xs">
-                  {key.replace(/_/g, ' ')}
-                </span>
-              ))}
+            <div className="space-y-2">
+              {savedPhysicalSymptoms.map((symptom) => {
+                const key = generateKey(symptom.label);
+                return (
+                  <label key={symptom.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.physical_symptom_keys.includes(key)}
+                      onChange={() => toggleSymptom(key, 'physical')}
+                      className="rounded"
+                    />
+                    <span>{symptom.label}</span>
+                  </label>
+                );
+              })}
+              {/* Add new physical symptom */}
+              <div className="flex gap-2 mt-2 pt-2 border-t">
+                <input
+                  type="text"
+                  value={newPhysicalSymptom}
+                  onChange={(e) => setNewPhysicalSymptom(e.target.value)}
+                  placeholder="Add new physical symptom"
+                  className="flex-1 px-2 py-1 border rounded text-sm"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddSymptom('cycle_physical')}
+                />
+                <button
+                  onClick={() => handleAddSymptom('cycle_physical')}
+                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                >
+                  + Add
+                </button>
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Emotional Symptoms */}
-        {cycleLog.emotional_symptom_keys && cycleLog.emotional_symptom_keys.length > 0 && (
+          {/* Emotional Symptoms Checkboxes */}
           <div>
             <h4 className="font-medium text-sm mb-2">Emotional Symptoms:</h4>
-            <div className="flex flex-wrap gap-2">
-              {cycleLog.emotional_symptom_keys.map((key) => (
-                <span key={key} className="px-2 py-1 bg-purple-100 rounded text-xs">
-                  {key.replace(/_/g, ' ')}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Bleeding Info */}
-        {(cycleLog.bleeding_quantity || cycleLog.blood_color) && (
-          <div className="text-sm space-y-1">
-            <h4 className="font-medium">Bleeding:</h4>
-            {cycleLog.bleeding_quantity && (
-              <div><span className="text-gray-600">Quantity:</span> {cycleLog.bleeding_quantity}</div>
-            )}
-            {cycleLog.blood_color && (
-              <div><span className="text-gray-600">Color:</span> {cycleLog.blood_color}</div>
-            )}
-            {cycleLog.clots && <div className="text-gray-600">Clots present</div>}
-            {cycleLog.mucus && <div className="text-gray-600">Mucus present</div>}
-          </div>
-        )}
-
-        {/* Comments */}
-        {comments.length > 0 && (
-          <div className="pt-3 border-t">
-            <h4 className="font-medium text-sm mb-2">Comments:</h4>
             <div className="space-y-2">
-              {comments.map((comment) => (
-                <div key={comment.id} className="text-sm bg-gray-50 p-2 rounded">
-                  <div className="font-medium text-xs text-gray-600">
-                    {comment.author_type === 'patient' ? 'You' : 'Clinician'}
-                  </div>
-                  <div className="text-gray-700">{comment.text}</div>
-                </div>
-              ))}
+              {savedEmotionalSymptoms.map((symptom) => {
+                const key = generateKey(symptom.label);
+                return (
+                  <label key={symptom.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.emotional_symptom_keys.includes(key)}
+                      onChange={() => toggleSymptom(key, 'emotional')}
+                      className="rounded"
+                    />
+                    <span>{symptom.label}</span>
+                  </label>
+                );
+              })}
+              {/* Add new emotional symptom */}
+              <div className="flex gap-2 mt-2 pt-2 border-t">
+                <input
+                  type="text"
+                  value={newEmotionalSymptom}
+                  onChange={(e) => setNewEmotionalSymptom(e.target.value)}
+                  placeholder="Add new emotional symptom"
+                  className="flex-1 px-2 py-1 border rounded text-sm"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddSymptom('cycle_emotional')}
+                />
+                <button
+                  onClick={() => handleAddSymptom('cycle_emotional')}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                >
+                  + Add
+                </button>
+              </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Bleeding Tracking */}
+          <div className="pt-3 border-t">
+            <h4 className="font-medium text-sm mb-3">Bleeding:</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Quantity</label>
+                <select
+                  value={formData.bleeding_quantity}
+                  onChange={(e) => setFormData({ ...formData, bleeding_quantity: e.target.value })}
+                  onBlur={() => handleSave()}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                >
+                  <option value="">None</option>
+                  <option value="spotting">Spotting</option>
+                  <option value="light">Light</option>
+                  <option value="medium">Medium</option>
+                  <option value="heavy">Heavy</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Blood Color</label>
+                <input
+                  type="text"
+                  value={formData.blood_color}
+                  onChange={(e) => setFormData({ ...formData, blood_color: e.target.value })}
+                  onBlur={() => handleSave()}
+                  placeholder="e.g., bright red, dark brown"
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Volume (ml, optional)</label>
+                <input
+                  type="number"
+                  value={formData.blood_volume}
+                  onChange={(e) => setFormData({ ...formData, blood_volume: e.target.value })}
+                  onBlur={() => handleSave()}
+                  placeholder="Estimated volume"
+                  className="w-32 px-3 py-2 border rounded text-sm"
+                />
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.clots}
+                    onChange={(e) => {
+                      const updated = { ...formData, clots: e.target.checked };
+                      setFormData(updated);
+                      handleSave(updated);
+                    }}
+                    className="rounded"
+                  />
+                  <span>Clots present</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formData.mucus}
+                    onChange={(e) => {
+                      const updated = { ...formData, mucus: e.target.checked };
+                      setFormData(updated);
+                      handleSave(updated);
+                    }}
+                    className="rounded"
+                  />
+                  <span>Mucus present</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Comments (read-only for now) */}
+          {comments.length > 0 && (
+            <div className="pt-3 border-t">
+              <h4 className="font-medium text-sm mb-2">Comments:</h4>
+              <div className="space-y-2">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="text-sm bg-gray-50 p-2 rounded">
+                    <div className="font-medium text-xs text-gray-600">
+                      {comment.author_type === 'patient' ? 'You' : 'Clinician'}
+                    </div>
+                    <div className="text-gray-700">{comment.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {cycleLog && (
+            <div className="space-y-4">
+              {/* Cycle Day */}
+              {cycleLog.cycle_day && (
+                <div className="text-sm">
+                  <span className="font-medium">Cycle Day:</span> {cycleLog.cycle_day}
+                </div>
+              )}
+
+              {/* Physical Symptoms */}
+              {cycleLog.physical_symptom_keys && cycleLog.physical_symptom_keys.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-sm mb-2">Physical Symptoms:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {cycleLog.physical_symptom_keys.map((key) => (
+                      <span key={key} className="px-2 py-1 bg-blue-100 rounded text-xs">
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Emotional Symptoms */}
+              {cycleLog.emotional_symptom_keys && cycleLog.emotional_symptom_keys.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-sm mb-2">Emotional Symptoms:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {cycleLog.emotional_symptom_keys.map((key) => (
+                      <span key={key} className="px-2 py-1 bg-purple-100 rounded text-xs">
+                        {key.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bleeding Info */}
+              {(cycleLog.bleeding_quantity || cycleLog.blood_color) && (
+                <div className="text-sm space-y-1">
+                  <h4 className="font-medium">Bleeding:</h4>
+                  {cycleLog.bleeding_quantity && (
+                    <div><span className="text-gray-600">Quantity:</span> {cycleLog.bleeding_quantity}</div>
+                  )}
+                  {cycleLog.blood_color && (
+                    <div><span className="text-gray-600">Color:</span> {cycleLog.blood_color}</div>
+                  )}
+                  {cycleLog.clots && <div className="text-gray-600">Clots present</div>}
+                  {cycleLog.mucus && <div className="text-gray-600">Mucus present</div>}
+                </div>
+              )}
+
+              {/* Comments */}
+              {comments.length > 0 && (
+                <div className="pt-3 border-t">
+                  <h4 className="font-medium text-sm mb-2">Comments:</h4>
+                  <div className="space-y-2">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="text-sm bg-gray-50 p-2 rounded">
+                        <div className="font-medium text-xs text-gray-600">
+                          {comment.author_type === 'patient' ? 'You' : 'Clinician'}
+                        </div>
+                        <div className="text-gray-700">{comment.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   );
 }

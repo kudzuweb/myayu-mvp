@@ -73,14 +73,33 @@ VALUES
 -- Saved symptoms
 INSERT INTO saved_symptoms (id, patient_id, label, category)
 VALUES
+  -- General symptoms
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Headache', 'general'),
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Fatigue', 'general'),
+
+  -- Cycle physical symptoms (from workbook)
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Bloating', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Breast changes', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Cold, chills', 'cycle_physical'),
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Cramps', 'cycle_physical'),
-  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Breast tenderness', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Cravings', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Gas', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Headaches', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Heat', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Itch', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Nausea', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Pain', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Sleep disturbed', 'cycle_physical'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Water retention', 'cycle_physical'),
+
+  -- Cycle emotional symptoms (from workbook)
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Agitated', 'cycle_emotional'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Angry', 'cycle_emotional'),
   (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Anxious', 'cycle_emotional'),
-  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Irritable', 'cycle_emotional'),
-  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Sad', 'cycle_emotional');
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Crying', 'cycle_emotional'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Moody', 'cycle_emotional'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Sad', 'cycle_emotional'),
+  (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'Sensitive', 'cycle_emotional');
 
 -- ============================================================================
 -- 4. CREATE 14 DAYS OF DAILY ENTRIES & ASSOCIATED DATA

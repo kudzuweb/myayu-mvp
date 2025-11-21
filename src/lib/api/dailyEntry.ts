@@ -541,6 +541,108 @@ export async function addCycleComment(
   }
 }
 
+/**
+ * Get or create a cycle log for a daily entry
+ */
+export async function getOrCreateCycleLog(
+  dailyEntryId: string,
+  patientId: string
+): Promise<CycleLog> {
+  try {
+    // Try to fetch existing cycle log
+    const { data: existing, error: fetchError } = await supabase
+      .from('cycle_logs')
+      .select('*')
+      .eq('daily_entry_id', dailyEntryId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      handleSupabaseError(fetchError, 'getOrCreateCycleLog - fetch');
+    }
+
+    if (existing) {
+      return existing as CycleLog;
+    }
+
+    // Create new cycle log
+    const { data: newLog, error: insertError } = await supabase
+      .from('cycle_logs')
+      .insert({
+        daily_entry_id: dailyEntryId,
+        patient_id: patientId,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      handleSupabaseError(insertError, 'getOrCreateCycleLog - insert');
+    }
+
+    return newLog as CycleLog;
+  } catch (error) {
+    handleSupabaseError(error, 'getOrCreateCycleLog');
+    throw error;
+  }
+}
+
+/**
+ * Get saved symptoms for a patient, optionally filtered by category
+ */
+export async function getCycleSavedSymptoms(
+  patientId: string,
+  category?: 'cycle_physical' | 'cycle_emotional'
+) {
+  try {
+    let query = supabase
+      .from('saved_symptoms')
+      .select('*')
+      .eq('patient_id', patientId);
+
+    if (category) {
+      query = query.eq('category', category);
+    } else {
+      query = query.in('category', ['cycle_physical', 'cycle_emotional']);
+    }
+
+    const { data, error } = await query.order('label');
+
+    if (error) handleSupabaseError(error, 'getCycleSavedSymptoms');
+    return data || [];
+  } catch (error) {
+    handleSupabaseError(error, 'getCycleSavedSymptoms');
+    throw error;
+  }
+}
+
+/**
+ * Add a new cycle symptom to saved_symptoms
+ */
+export async function addCycleSymptom(params: {
+  patient_id: string;
+  category: 'cycle_physical' | 'cycle_emotional';
+  label: string;
+}) {
+  try {
+    const { data, error } = await supabase
+      .from('saved_symptoms')
+      .insert({
+        patient_id: params.patient_id,
+        category: params.category,
+        label: params.label,
+      })
+      .select()
+      .single();
+
+    if (error) handleSupabaseError(error, 'addCycleSymptom');
+    return data;
+  } catch (error) {
+    handleSupabaseError(error, 'addCycleSymptom');
+    throw error;
+  }
+}
+
 // ============================================================================
 // REGIMEN
 // ============================================================================

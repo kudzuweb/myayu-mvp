@@ -99,6 +99,41 @@ export async function getOrCreateDailyEntry(
 }
 
 /**
+ * Update daily entry fields (energy, mood, reflection, cycle_day)
+ */
+export async function updateDailyEntry(params: {
+  id: string;
+  energy_physical?: number;
+  energy_mental?: number;
+  energy_emotional?: number;
+  energy_drive?: number;
+  overall_mood?: number;
+  reflection?: string;
+  cycle_day?: number;
+}): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('daily_entries')
+      .update({
+        energy_physical: params.energy_physical,
+        energy_mental: params.energy_mental,
+        energy_emotional: params.energy_emotional,
+        energy_drive: params.energy_drive,
+        overall_mood: params.overall_mood,
+        reflection: params.reflection,
+        cycle_day: params.cycle_day,
+      })
+      .eq('id', params.id);
+
+    if (error) {
+      handleSupabaseError(error, 'updateDailyEntry');
+    }
+  } catch (error) {
+    handleSupabaseError(error, 'updateDailyEntry');
+  }
+}
+
+/**
  * Get complete daily entry bundle for a specific date
  * Fetches all associated logs, saved items, and regimen data
  */
@@ -134,7 +169,7 @@ export async function getDailyEntryBundle(
       savedSymptomsRes,
     ] = await Promise.all([
       supabase.from('sleep_blocks').select('*').eq('daily_entry_id', dailyEntry.id),
-      supabase.from('early_morning_entries').select('*').eq('daily_entry_id', dailyEntry.id).maybeSingle(),
+      supabase.from('early_morning_entries').select('*').eq('daily_entry_id', dailyEntry.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('daily_fluid_totals').select('*').eq('daily_entry_id', dailyEntry.id).maybeSingle(),
       supabase.from('food_events').select('*').eq('daily_entry_id', dailyEntry.id),
       supabase.from('bowel_movements').select('*').eq('daily_entry_id', dailyEntry.id),

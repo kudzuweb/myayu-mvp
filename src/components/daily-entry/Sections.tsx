@@ -345,15 +345,22 @@ export function FoodFluidSection({ data, editable }: { data: DailyEntryBundle; e
     description: '',
   });
 
+  // Helper to safely parse number, returns undefined for invalid input
+  const parseNumber = (value: string): number | undefined => {
+    if (!value || value.trim() === '') return undefined;
+    const num = parseFloat(value);
+    return isNaN(num) ? undefined : num;
+  };
+
   const handleSaveFluids = useCallback(async () => {
     try {
       await upsertFluidTotals({
         id: fluidTotals?.id,
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
-        total_water_oz: fluidData.total_water_oz ? parseFloat(fluidData.total_water_oz) : undefined,
-        total_caffeine_oz: fluidData.total_caffeine_oz ? parseFloat(fluidData.total_caffeine_oz) : undefined,
-        total_other_oz: fluidData.total_other_oz ? parseFloat(fluidData.total_other_oz) : undefined,
+        total_water_oz: parseNumber(fluidData.total_water_oz),
+        total_caffeine_oz: parseNumber(fluidData.total_caffeine_oz),
+        total_other_oz: parseNumber(fluidData.total_other_oz),
       });
     } catch (error) {
       console.error('Failed to save fluid totals:', error);

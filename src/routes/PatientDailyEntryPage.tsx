@@ -48,24 +48,25 @@ export default function PatientDailyEntryPage() {
     fetchConfig();
   }, []);
 
+  // Fetch bundle function (can be called to refresh data)
+  const fetchBundle = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getDailyEntryBundle(DEV_PATIENT_ID, selectedDate);
+      setBundle(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+      console.error('Error fetching bundle:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate]);
+
   // Fetch bundle when date changes
   useEffect(() => {
-    const fetchBundle = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getDailyEntryBundle(DEV_PATIENT_ID, selectedDate);
-        setBundle(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-        console.error('Error fetching bundle:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchBundle();
-  }, [selectedDate]);
+  }, [fetchBundle]);
 
   const handlePrevDay = () => {
     const date = new Date(selectedDate);
@@ -150,8 +151,8 @@ export default function PatientDailyEntryPage() {
           <h2 className="text-2xl font-bold mb-4">Daily Tracking</h2>
           <div className="space-y-4">
             <SleepSection data={bundle} editable={isEditable} />
-            <EarlyMorningSection data={bundle} />
-            <FoodFluidSection data={bundle} />
+            <EarlyMorningSection data={bundle} editable={isEditable} />
+            <FoodFluidSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
             <BowelSection data={bundle} />
             <ExerciseSection data={bundle} />
             <EnergySection data={bundle} />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { differenceInCalendarDays } from 'date-fns';
 import { getDailyEntryBundle, getPatientConfig } from '../lib/api/dailyEntry';
 import type { DailyEntryBundle, PatientConfig } from '../types/db';
@@ -153,12 +153,12 @@ export default function PatientDailyEntryPage() {
             <SleepSection data={bundle} editable={isEditable} />
             <EarlyMorningSection data={bundle} editable={isEditable} />
             <FoodFluidSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
-            <BowelSection data={bundle} />
-            <ExerciseSection data={bundle} />
-            <EnergySection data={bundle} />
-            <VitalsSection data={bundle} />
-            <MedicationsSection data={bundle} />
-            <SymptomsSection data={bundle} />
+            <BowelSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
+            <ExerciseSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
+            <EnergySection data={bundle} editable={isEditable} />
+            <VitalsSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
+            <MedicationsSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
+            <SymptomsSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
           </div>
         </section>
 

@@ -7,6 +7,17 @@ import {
   addFoodEvent,
   deleteFoodEvent,
   upsertFluidTotals,
+  addBowelMovement,
+  deleteBowelMovement,
+  updateDailyEntry,
+  addExerciseEvent,
+  deleteExerciseEvent,
+  addVitalReading,
+  deleteVitalReading,
+  addMedicationIntake,
+  deleteMedicationIntake,
+  addSymptomLog,
+  deleteSymptomLog,
 } from '../../lib/api/dailyEntry';
 
 // Reusable section wrapper
@@ -593,194 +604,931 @@ export function FoodFluidSection({
   );
 }
 
-export function BowelSection({ data }: { data: DailyEntryBundle }) {
+export function BowelSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
   const movements = data.bowelMovements;
 
-  if (movements.length === 0) {
-    return <Section title="Bowel Movements"><NoData message="No bowel movements logged" /></Section>;
-  }
+  const [newMovement, setNewMovement] = useState({
+    time: '',
+    details: '',
+  });
+
+  const handleAddMovement = useCallback(async () => {
+    if (!newMovement.details) return;
+
+    try {
+      const timestamp = newMovement.time
+        ? new Date(`${data.dailyEntry.date}T${newMovement.time}`).toISOString()
+        : undefined;
+
+      await addBowelMovement({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        time: timestamp,
+        details: newMovement.details,
+      });
+
+      setNewMovement({ time: '', details: '' });
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to add bowel movement:', error);
+    }
+  }, [newMovement, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date, onRefresh]);
+
+  const handleDeleteMovement = useCallback(async (id: string) => {
+    try {
+      await deleteBowelMovement(id);
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to delete bowel movement:', error);
+    }
+  }, [onRefresh]);
 
   return (
     <Section title="Bowel Movements">
-      <div className="space-y-2">
-        {movements.map((movement) => (
-          <div key={movement.id} className="text-sm pl-3 border-l-2 border-green-200">
-            {movement.time && (
-              <div className="text-gray-600 text-xs">
-                {new Date(movement.time).toLocaleTimeString()}
-              </div>
-            )}
-            {movement.details && (
-              <div className="text-gray-700">{movement.details}</div>
-            )}
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
+      {editable ? (
+        <div className="space-y-3">
+          {movements.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {movements.map((movement) => (
+                <div key={movement.id} className="flex justify-between items-start text-sm pl-3 border-l-2 border-green-200 py-1">
+                  <div>
+                    {movement.time && (
+                      <div className="text-gray-600 text-xs">
+                        {new Date(movement.time).toLocaleTimeString()}
+                      </div>
+                    )}
+                    {movement.details && (
+                      <div className="text-gray-700">{movement.details}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMovement(movement.id)}
+                    className="text-red-600 hover:text-red-800 text-xs ml-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-export function ExerciseSection({ data }: { data: DailyEntryBundle }) {
-  const exercises = data.exerciseEvents;
-
-  if (exercises.length === 0) {
-    return <Section title="Exercise / Movement"><NoData message="No exercise logged" /></Section>;
-  }
-
-  return (
-    <Section title="Exercise / Movement">
-      <div className="space-y-3">
-        {exercises.map((exercise) => (
-          <div key={exercise.id} className="text-sm pl-3 border-l-2 border-purple-200">
-            <div className="font-medium">{exercise.exercise_type || 'Exercise'}</div>
-            {exercise.start_time && (
-              <div className="text-gray-600 text-xs">
-                {new Date(exercise.start_time).toLocaleTimeString()}
-                {exercise.duration_minutes && <span> • {exercise.duration_minutes} min</span>}
-              </div>
-            )}
-            {(exercise.felt_physical || exercise.felt_mental || exercise.felt_emotional) && (
-              <div className="mt-1 text-xs text-gray-600">
-                {exercise.felt_physical && <span>Physical: {exercise.felt_physical}/10 </span>}
-                {exercise.felt_mental && <span>Mental: {exercise.felt_mental}/10 </span>}
-                {exercise.felt_emotional && <span>Emotional: {exercise.felt_emotional}/10</span>}
-              </div>
-            )}
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <input
+              type="time"
+              value={newMovement.time}
+              onChange={(e) => setNewMovement({ ...newMovement, time: e.target.value })}
+              className="w-32 px-2 py-1 border rounded text-sm"
+            />
+            <input
+              type="text"
+              value={newMovement.details}
+              onChange={(e) => setNewMovement({ ...newMovement, details: e.target.value })}
+              placeholder="Details (e.g., Normal consistency)"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <button
+              onClick={handleAddMovement}
+              className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+            >
+              + Add
+            </button>
           </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-export function EnergySection({ data }: { data: DailyEntryBundle }) {
-  const entry = data.dailyEntry;
-
-  return (
-    <Section title="Energy & Mood">
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        {entry.energy_physical !== null && (
-          <div>
-            <span className="text-gray-600">Physical:</span>
-            <span className="font-medium ml-2">{entry.energy_physical}/10</span>
-          </div>
-        )}
-        {entry.energy_mental !== null && (
-          <div>
-            <span className="text-gray-600">Mental:</span>
-            <span className="font-medium ml-2">{entry.energy_mental}/10</span>
-          </div>
-        )}
-        {entry.energy_emotional !== null && (
-          <div>
-            <span className="text-gray-600">Emotional:</span>
-            <span className="font-medium ml-2">{entry.energy_emotional}/10</span>
-          </div>
-        )}
-        {entry.energy_drive !== null && (
-          <div>
-            <span className="text-gray-600">Drive:</span>
-            <span className="font-medium ml-2">{entry.energy_drive}/10</span>
-          </div>
-        )}
-        {entry.overall_mood !== null && (
-          <div className="col-span-2">
-            <span className="text-gray-600">Overall Mood:</span>
-            <span className="font-medium ml-2">{entry.overall_mood}/10</span>
-          </div>
-        )}
-      </div>
-      {entry.reflection && (
-        <div className="mt-3 pt-3 border-t">
-          <span className="font-medium text-sm">Reflection:</span>
-          <p className="text-gray-700 text-sm mt-1">{entry.reflection}</p>
         </div>
+      ) : (
+        <>
+          {movements.length === 0 ? (
+            <NoData message="No bowel movements logged" />
+          ) : (
+            <div className="space-y-2">
+              {movements.map((movement) => (
+                <div key={movement.id} className="text-sm pl-3 border-l-2 border-green-200">
+                  {movement.time && (
+                    <div className="text-gray-600 text-xs">
+                      {new Date(movement.time).toLocaleTimeString()}
+                    </div>
+                  )}
+                  {movement.details && (
+                    <div className="text-gray-700">{movement.details}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </Section>
   );
 }
 
-export function VitalsSection({ data }: { data: DailyEntryBundle }) {
+export function ExerciseSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
+  const exercises = data.exerciseEvents;
+
+  const [newExercise, setNewExercise] = useState({
+    exercise_type: '',
+    start_time: '',
+    duration_minutes: '',
+    felt_physical: '',
+    felt_mental: '',
+    felt_emotional: '',
+  });
+
+  const handleAddExercise = useCallback(async () => {
+    if (!newExercise.exercise_type) return;
+
+    try {
+      const timestamp = newExercise.start_time
+        ? new Date(`${data.dailyEntry.date}T${newExercise.start_time}`).toISOString()
+        : undefined;
+
+      await addExerciseEvent({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        exercise_type: newExercise.exercise_type,
+        start_time: timestamp,
+        duration_minutes: newExercise.duration_minutes ? parseInt(newExercise.duration_minutes) : undefined,
+        felt_physical: newExercise.felt_physical ? parseInt(newExercise.felt_physical) : undefined,
+        felt_mental: newExercise.felt_mental ? parseInt(newExercise.felt_mental) : undefined,
+        felt_emotional: newExercise.felt_emotional ? parseInt(newExercise.felt_emotional) : undefined,
+      });
+
+      setNewExercise({
+        exercise_type: '',
+        start_time: '',
+        duration_minutes: '',
+        felt_physical: '',
+        felt_mental: '',
+        felt_emotional: '',
+      });
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to add exercise:', error);
+    }
+  }, [newExercise, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date, onRefresh]);
+
+  const handleDeleteExercise = useCallback(async (id: string) => {
+    try {
+      await deleteExerciseEvent(id);
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to delete exercise:', error);
+    }
+  }, [onRefresh]);
+
+  return (
+    <Section title="Exercise / Movement">
+      {editable ? (
+        <div className="space-y-3">
+          {exercises.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {exercises.map((exercise) => (
+                <div key={exercise.id} className="flex justify-between items-start text-sm pl-3 border-l-2 border-purple-200 py-1">
+                  <div>
+                    <div className="font-medium">{exercise.exercise_type || 'Exercise'}</div>
+                    {exercise.start_time && (
+                      <div className="text-gray-600 text-xs">
+                        {new Date(exercise.start_time).toLocaleTimeString()}
+                        {exercise.duration_minutes && <span> • {exercise.duration_minutes} min</span>}
+                      </div>
+                    )}
+                    {(exercise.felt_physical || exercise.felt_mental || exercise.felt_emotional) && (
+                      <div className="mt-1 text-xs text-gray-600">
+                        {exercise.felt_physical && <span>Physical: {exercise.felt_physical}/10 </span>}
+                        {exercise.felt_mental && <span>Mental: {exercise.felt_mental}/10 </span>}
+                        {exercise.felt_emotional && <span>Emotional: {exercise.felt_emotional}/10</span>}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteExercise(exercise.id)}
+                    className="text-red-600 hover:text-red-800 text-xs ml-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <input
+              type="text"
+              value={newExercise.exercise_type}
+              onChange={(e) => setNewExercise({ ...newExercise, exercise_type: e.target.value })}
+              placeholder="Exercise type (e.g., Walking, Yoga)"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                type="time"
+                value={newExercise.start_time}
+                onChange={(e) => setNewExercise({ ...newExercise, start_time: e.target.value })}
+                placeholder="Start time"
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+              <input
+                type="number"
+                value={newExercise.duration_minutes}
+                onChange={(e) => setNewExercise({ ...newExercise, duration_minutes: e.target.value })}
+                placeholder="Duration (min)"
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={newExercise.felt_physical}
+                onChange={(e) => setNewExercise({ ...newExercise, felt_physical: e.target.value })}
+                placeholder="Physical (0-10)"
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={newExercise.felt_mental}
+                onChange={(e) => setNewExercise({ ...newExercise, felt_mental: e.target.value })}
+                placeholder="Mental (0-10)"
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={newExercise.felt_emotional}
+                onChange={(e) => setNewExercise({ ...newExercise, felt_emotional: e.target.value })}
+                placeholder="Emotional (0-10)"
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <button
+              onClick={handleAddExercise}
+              className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+            >
+              + Add Exercise
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {exercises.length === 0 ? (
+            <NoData message="No exercise logged" />
+          ) : (
+            <div className="space-y-3">
+              {exercises.map((exercise) => (
+                <div key={exercise.id} className="text-sm pl-3 border-l-2 border-purple-200">
+                  <div className="font-medium">{exercise.exercise_type || 'Exercise'}</div>
+                  {exercise.start_time && (
+                    <div className="text-gray-600 text-xs">
+                      {new Date(exercise.start_time).toLocaleTimeString()}
+                      {exercise.duration_minutes && <span> • {exercise.duration_minutes} min</span>}
+                    </div>
+                  )}
+                  {(exercise.felt_physical || exercise.felt_mental || exercise.felt_emotional) && (
+                    <div className="mt-1 text-xs text-gray-600">
+                      {exercise.felt_physical && <span>Physical: {exercise.felt_physical}/10 </span>}
+                      {exercise.felt_mental && <span>Mental: {exercise.felt_mental}/10 </span>}
+                      {exercise.felt_emotional && <span>Emotional: {exercise.felt_emotional}/10</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+export function EnergySection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
+  const entry = data.dailyEntry;
+
+  const [formData, setFormData] = useState({
+    energy_physical: entry.energy_physical ?? 5,
+    energy_mental: entry.energy_mental ?? 5,
+    energy_emotional: entry.energy_emotional ?? 5,
+    energy_drive: entry.energy_drive ?? 5,
+    overall_mood: entry.overall_mood ?? 5,
+    reflection: entry.reflection || '',
+  });
+
+  const handleSave = useCallback(async () => {
+    try {
+      await updateDailyEntry({
+        id: entry.id,
+        energy_physical: formData.energy_physical,
+        energy_mental: formData.energy_mental,
+        energy_emotional: formData.energy_emotional,
+        energy_drive: formData.energy_drive,
+        overall_mood: formData.overall_mood,
+        reflection: formData.reflection || undefined,
+      });
+    } catch (error) {
+      console.error('Failed to save energy data:', error);
+    }
+  }, [formData, entry.id]);
+
+  return (
+    <Section title="Energy & Mood">
+      {editable ? (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Physical Energy: {formData.energy_physical}/10
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={formData.energy_physical}
+              onChange={(e) => setFormData({ ...formData, energy_physical: parseInt(e.target.value) })}
+              onMouseUp={handleSave}
+              onTouchEnd={handleSave}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Mental Energy: {formData.energy_mental}/10
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={formData.energy_mental}
+              onChange={(e) => setFormData({ ...formData, energy_mental: parseInt(e.target.value) })}
+              onMouseUp={handleSave}
+              onTouchEnd={handleSave}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Emotional Energy: {formData.energy_emotional}/10
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={formData.energy_emotional}
+              onChange={(e) => setFormData({ ...formData, energy_emotional: parseInt(e.target.value) })}
+              onMouseUp={handleSave}
+              onTouchEnd={handleSave}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Drive: {formData.energy_drive}/10
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={formData.energy_drive}
+              onChange={(e) => setFormData({ ...formData, energy_drive: parseInt(e.target.value) })}
+              onMouseUp={handleSave}
+              onTouchEnd={handleSave}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Overall Mood: {formData.overall_mood}/10
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value={formData.overall_mood}
+              onChange={(e) => setFormData({ ...formData, overall_mood: parseInt(e.target.value) })}
+              onMouseUp={handleSave}
+              onTouchEnd={handleSave}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Reflection (optional)</label>
+            <textarea
+              value={formData.reflection}
+              onChange={(e) => setFormData({ ...formData, reflection: e.target.value })}
+              onBlur={handleSave}
+              placeholder="How are you feeling today? Any thoughts or observations..."
+              rows={4}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {entry.energy_physical !== null && (
+              <div>
+                <span className="text-gray-600">Physical:</span>
+                <span className="font-medium ml-2">{entry.energy_physical}/10</span>
+              </div>
+            )}
+            {entry.energy_mental !== null && (
+              <div>
+                <span className="text-gray-600">Mental:</span>
+                <span className="font-medium ml-2">{entry.energy_mental}/10</span>
+              </div>
+            )}
+            {entry.energy_emotional !== null && (
+              <div>
+                <span className="text-gray-600">Emotional:</span>
+                <span className="font-medium ml-2">{entry.energy_emotional}/10</span>
+              </div>
+            )}
+            {entry.energy_drive !== null && (
+              <div>
+                <span className="text-gray-600">Drive:</span>
+                <span className="font-medium ml-2">{entry.energy_drive}/10</span>
+              </div>
+            )}
+            {entry.overall_mood !== null && (
+              <div className="col-span-2">
+                <span className="text-gray-600">Overall Mood:</span>
+                <span className="font-medium ml-2">{entry.overall_mood}/10</span>
+              </div>
+            )}
+          </div>
+          {entry.reflection && (
+            <div className="mt-3 pt-3 border-t">
+              <span className="font-medium text-sm">Reflection:</span>
+              <p className="text-gray-700 text-sm mt-1">{entry.reflection}</p>
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+export function VitalsSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
   const vitals = data.vitalReadings;
 
-  if (vitals.length === 0) {
-    return <Section title="Vitals"><NoData message="No vitals logged" /></Section>;
-  }
+  const [newVital, setNewVital] = useState<{
+    type: 'blood_pressure' | 'blood_glucose' | 'early_am_temp' | 'pm_temp' | 'weight';
+    value: string;
+    aux_value: string;
+    unit: string;
+  }>({
+    type: 'blood_pressure',
+    value: '',
+    aux_value: '',
+    unit: '',
+  });
+
+  const handleAddVital = useCallback(async () => {
+    if (!newVital.value) return;
+
+    try {
+      await addVitalReading({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        type: newVital.type,
+        value: parseFloat(newVital.value),
+        aux_value: newVital.aux_value ? parseFloat(newVital.aux_value) : undefined,
+        unit: newVital.unit || undefined,
+      });
+
+      setNewVital({ type: 'blood_pressure', value: '', aux_value: '', unit: '' });
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to add vital:', error);
+    }
+  }, [newVital, data.dailyEntry.id, data.dailyEntry.patient_id, onRefresh]);
+
+  const handleDeleteVital = useCallback(async (id: string) => {
+    try {
+      await deleteVitalReading(id);
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to delete vital:', error);
+    }
+  }, [onRefresh]);
 
   return (
     <Section title="Vitals">
-      <div className="space-y-2">
-        {vitals.map((vital) => (
-          <div key={vital.id} className="text-sm flex justify-between">
-            <span className="font-medium capitalize">
-              {vital.type.replace(/_/g, ' ')}:
-            </span>
-            <span>
-              {vital.value}
-              {vital.aux_value && `/${vital.aux_value}`}
-              {vital.unit && ` ${vital.unit}`}
-            </span>
+      {editable ? (
+        <div className="space-y-3">
+          {vitals.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {vitals.map((vital) => (
+                <div key={vital.id} className="flex justify-between items-center text-sm">
+                  <div>
+                    <span className="font-medium capitalize">
+                      {vital.type.replace(/_/g, ' ')}:
+                    </span>
+                    <span className="ml-2">
+                      {vital.value}
+                      {vital.aux_value && `/${vital.aux_value}`}
+                      {vital.unit && ` ${vital.unit}`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteVital(vital.id)}
+                    className="text-red-600 hover:text-red-800 text-xs"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <select
+              value={newVital.type}
+              onChange={(e) => setNewVital({ ...newVital, type: e.target.value as any })}
+              className="w-full px-2 py-1 border rounded text-sm"
+            >
+              <option value="blood_pressure">Blood Pressure</option>
+              <option value="blood_glucose">Blood Glucose</option>
+              <option value="early_am_temp">Early AM Temperature</option>
+              <option value="pm_temp">PM Temperature</option>
+              <option value="weight">Weight</option>
+            </select>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={newVital.value}
+                onChange={(e) => setNewVital({ ...newVital, value: e.target.value })}
+                placeholder="Value"
+                className="flex-1 px-2 py-1 border rounded text-sm"
+              />
+              {newVital.type === 'blood_pressure' && (
+                <input
+                  type="number"
+                  value={newVital.aux_value}
+                  onChange={(e) => setNewVital({ ...newVital, aux_value: e.target.value })}
+                  placeholder="Diastolic"
+                  className="flex-1 px-2 py-1 border rounded text-sm"
+                />
+              )}
+              <input
+                type="text"
+                value={newVital.unit}
+                onChange={(e) => setNewVital({ ...newVital, unit: e.target.value })}
+                placeholder="Unit (e.g., mmHg, bpm)"
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <button
+              onClick={handleAddVital}
+              className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+            >
+              + Add Vital
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <>
+          {vitals.length === 0 ? (
+            <NoData message="No vitals logged" />
+          ) : (
+            <div className="space-y-2">
+              {vitals.map((vital) => (
+                <div key={vital.id} className="text-sm flex justify-between">
+                  <span className="font-medium capitalize">
+                    {vital.type.replace(/_/g, ' ')}:
+                  </span>
+                  <span>
+                    {vital.value}
+                    {vital.aux_value && `/${vital.aux_value}`}
+                    {vital.unit && ` ${vital.unit}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   );
 }
 
-export function MedicationsSection({ data }: { data: DailyEntryBundle }) {
+export function MedicationsSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
   const meds = data.medicationIntakes;
 
-  if (meds.length === 0) {
-    return <Section title="Medications (Non-Plan)"><NoData message="No medications logged" /></Section>;
-  }
+  const [newMed, setNewMed] = useState({
+    name: '',
+    dose: '',
+    time: '',
+    notes: '',
+  });
+
+  const handleAddMed = useCallback(async () => {
+    if (!newMed.name) return;
+
+    try {
+      const timestamp = newMed.time
+        ? new Date(`${data.dailyEntry.date}T${newMed.time}`).toISOString()
+        : undefined;
+
+      await addMedicationIntake({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        name: newMed.name,
+        dose: newMed.dose || undefined,
+        time: timestamp,
+        notes: newMed.notes || undefined,
+      });
+
+      setNewMed({ name: '', dose: '', time: '', notes: '' });
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to add medication:', error);
+    }
+  }, [newMed, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date, onRefresh]);
+
+  const handleDeleteMed = useCallback(async (id: string) => {
+    try {
+      await deleteMedicationIntake(id);
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to delete medication:', error);
+    }
+  }, [onRefresh]);
 
   return (
     <Section title="Medications (Non-Plan)">
-      <div className="space-y-2">
-        {meds.map((med) => (
-          <div key={med.id} className="text-sm pl-3 border-l-2 border-red-200">
-            <div className="font-medium">{med.name || 'Medication'}</div>
-            {med.dose && <div className="text-gray-600">Dose: {med.dose}</div>}
-            {med.time && (
-              <div className="text-gray-600 text-xs">
-                {new Date(med.time).toLocaleTimeString()}
-              </div>
-            )}
-            {med.notes && <div className="text-gray-700 text-xs mt-1">{med.notes}</div>}
+      {editable ? (
+        <div className="space-y-3">
+          {meds.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {meds.map((med) => (
+                <div key={med.id} className="flex justify-between items-start text-sm pl-3 border-l-2 border-red-200 py-1">
+                  <div>
+                    <div className="font-medium">{med.name || 'Medication'}</div>
+                    {med.dose && <div className="text-gray-600 text-xs">Dose: {med.dose}</div>}
+                    {med.time && (
+                      <div className="text-gray-600 text-xs">
+                        {new Date(med.time).toLocaleTimeString()}
+                      </div>
+                    )}
+                    {med.notes && <div className="text-gray-700 text-xs mt-1">{med.notes}</div>}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMed(med.id)}
+                    className="text-red-600 hover:text-red-800 text-xs ml-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <input
+              type="text"
+              value={newMed.name}
+              onChange={(e) => setNewMed({ ...newMed, name: e.target.value })}
+              placeholder="Medication name"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newMed.dose}
+                onChange={(e) => setNewMed({ ...newMed, dose: e.target.value })}
+                placeholder="Dose (e.g., 10mg)"
+                className="flex-1 px-2 py-1 border rounded text-sm"
+              />
+              <input
+                type="time"
+                value={newMed.time}
+                onChange={(e) => setNewMed({ ...newMed, time: e.target.value })}
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <input
+              type="text"
+              value={newMed.notes}
+              onChange={(e) => setNewMed({ ...newMed, notes: e.target.value })}
+              placeholder="Notes (optional)"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <button
+              onClick={handleAddMed}
+              className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+            >
+              + Add Medication
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <>
+          {meds.length === 0 ? (
+            <NoData message="No medications logged" />
+          ) : (
+            <div className="space-y-2">
+              {meds.map((med) => (
+                <div key={med.id} className="text-sm pl-3 border-l-2 border-red-200">
+                  <div className="font-medium">{med.name || 'Medication'}</div>
+                  {med.dose && <div className="text-gray-600">Dose: {med.dose}</div>}
+                  {med.time && (
+                    <div className="text-gray-600 text-xs">
+                      {new Date(med.time).toLocaleTimeString()}
+                    </div>
+                  )}
+                  {med.notes && <div className="text-gray-700 text-xs mt-1">{med.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   );
 }
 
-export function SymptomsSection({ data }: { data: DailyEntryBundle }) {
+export function SymptomsSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
   const symptoms = data.symptomLogs;
 
-  if (symptoms.length === 0) {
-    return <Section title="Symptoms"><NoData message="No symptoms logged" /></Section>;
-  }
+  const [newSymptom, setNewSymptom] = useState({
+    label: '',
+    severity: '',
+    time: '',
+    notes: '',
+  });
+
+  const handleAddSymptom = useCallback(async () => {
+    if (!newSymptom.label) return;
+
+    try {
+      const timestamp = newSymptom.time
+        ? new Date(`${data.dailyEntry.date}T${newSymptom.time}`).toISOString()
+        : undefined;
+
+      await addSymptomLog({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        label: newSymptom.label,
+        severity: newSymptom.severity ? parseInt(newSymptom.severity) : undefined,
+        time: timestamp,
+        notes: newSymptom.notes || undefined,
+      });
+
+      setNewSymptom({ label: '', severity: '', time: '', notes: '' });
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to add symptom:', error);
+    }
+  }, [newSymptom, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date, onRefresh]);
+
+  const handleDeleteSymptom = useCallback(async (id: string) => {
+    try {
+      await deleteSymptomLog(id);
+      if (onRefresh) await onRefresh();
+    } catch (error) {
+      console.error('Failed to delete symptom:', error);
+    }
+  }, [onRefresh]);
 
   return (
     <Section title="Symptoms">
-      <div className="space-y-2">
-        {symptoms.map((symptom) => (
-          <div key={symptom.id} className="text-sm pl-3 border-l-2 border-yellow-200">
-            <div className="flex justify-between">
-              <span className="font-medium">{symptom.label || 'Symptom'}</span>
-              {symptom.severity !== null && (
-                <span className="text-gray-600">Severity: {symptom.severity}/10</span>
-              )}
+      {editable ? (
+        <div className="space-y-3">
+          {symptoms.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {symptoms.map((symptom) => (
+                <div key={symptom.id} className="flex justify-between items-start text-sm pl-3 border-l-2 border-yellow-200 py-1">
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <span className="font-medium">{symptom.label || 'Symptom'}</span>
+                      {symptom.severity !== null && (
+                        <span className="text-gray-600 text-xs">Severity: {symptom.severity}/10</span>
+                      )}
+                    </div>
+                    {symptom.time && (
+                      <div className="text-gray-600 text-xs">
+                        {new Date(symptom.time).toLocaleTimeString()}
+                      </div>
+                    )}
+                    {symptom.notes && <div className="text-gray-700 text-xs mt-1">{symptom.notes}</div>}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteSymptom(symptom.id)}
+                    className="text-red-600 hover:text-red-800 text-xs ml-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
             </div>
-            {symptom.time && (
-              <div className="text-gray-600 text-xs">
-                {new Date(symptom.time).toLocaleTimeString()}
-              </div>
-            )}
-            {symptom.notes && <div className="text-gray-700 text-xs mt-1">{symptom.notes}</div>}
+          )}
+
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <input
+              type="text"
+              value={newSymptom.label}
+              onChange={(e) => setNewSymptom({ ...newSymptom, label: e.target.value })}
+              placeholder="Symptom name (e.g., Headache, Nausea)"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={newSymptom.severity}
+                onChange={(e) => setNewSymptom({ ...newSymptom, severity: e.target.value })}
+                placeholder="Severity (0-10)"
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+              <input
+                type="time"
+                value={newSymptom.time}
+                onChange={(e) => setNewSymptom({ ...newSymptom, time: e.target.value })}
+                className="w-32 px-2 py-1 border rounded text-sm"
+              />
+            </div>
+            <input
+              type="text"
+              value={newSymptom.notes}
+              onChange={(e) => setNewSymptom({ ...newSymptom, notes: e.target.value })}
+              placeholder="Notes (optional)"
+              className="w-full px-2 py-1 border rounded text-sm"
+            />
+            <button
+              onClick={handleAddSymptom}
+              className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+            >
+              + Add Symptom
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <>
+          {symptoms.length === 0 ? (
+            <NoData message="No symptoms logged" />
+          ) : (
+            <div className="space-y-2">
+              {symptoms.map((symptom) => (
+                <div key={symptom.id} className="text-sm pl-3 border-l-2 border-yellow-200">
+                  <div className="flex justify-between">
+                    <span className="font-medium">{symptom.label || 'Symptom'}</span>
+                    {symptom.severity !== null && (
+                      <span className="text-gray-600">Severity: {symptom.severity}/10</span>
+                    )}
+                  </div>
+                  {symptom.time && (
+                    <div className="text-gray-600 text-xs">
+                      {new Date(symptom.time).toLocaleTimeString()}
+                    </div>
+                  )}
+                  {symptom.notes && <div className="text-gray-700 text-xs mt-1">{symptom.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </Section>
   );
 }

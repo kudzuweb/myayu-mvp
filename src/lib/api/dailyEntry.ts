@@ -19,7 +19,33 @@ import type {
   RegimenTreatment,
   RegimenTreatmentCompletion,
   RegimenNote,
+  PatientConfig,
 } from '../../types/db';
+
+// ============================================================================
+// PATIENT CONFIG
+// ============================================================================
+
+/**
+ * Get patient configuration (edit window, tracking settings, etc.)
+ */
+export async function getPatientConfig(patientId: string): Promise<PatientConfig> {
+  try {
+    const { data, error } = await supabase
+      .from('patient_configs')
+      .select('*')
+      .eq('patient_id', patientId)
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'getPatientConfig');
+    }
+
+    return data as PatientConfig;
+  } catch (error) {
+    handleSupabaseError(error, 'getPatientConfig');
+  }
+}
 
 // ============================================================================
 // DAILY ENTRY (anchor row)

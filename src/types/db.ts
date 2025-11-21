@@ -346,3 +346,22 @@ export interface DailyEntryBundle {
   savedMeds: SavedMed[];
   savedSymptoms: SavedSymptom[];
 }
+
+// ============================================================================
+// TRACKER SUMMARY
+// ============================================================================
+
+export interface DailySummary {
+  date: string;
+  energy_physical?: number;
+  energy_mental?: number;
+  energy_emotional?: number;
+  energy_drive?: number;
+  overall_mood?: number;
+  food_count: number;
+  bowel_movement_count: number;
+  exercise_minutes: number;
+  formulation_adherence_percent: number;
+  treatment_adherence_percent: number;
+  has_cycle_log: boolean;
+}

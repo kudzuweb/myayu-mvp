@@ -738,3 +738,151 @@ export async function getRegimenForDate(patientId: string, date: string) {
     throw error;
   }
 }
+
+/**
+ * Get daily summaries for a date range for tracker view
+ * Returns aggregated data for each day including counts and adherence
+ */
+export async function getDailySummaryRange(patientId: string, fromDate: string, toDate: string) {
+  try {
+    // Fetch all daily entries in range
+    const { data: dailyEntries, error: entriesError } = await supabase
+      .from('daily_entries')
+      .select('*')
+      .eq('patient_id', patientId)
+      .gte('date', fromDate)
+      .lte('date', toDate)
+      .order('date', { ascending: false });
+
+    if (entriesError) handleSupabaseError(entriesError, 'getDailySummaryRange - daily_entries');
+
+    if (!dailyEntries || dailyEntries.length === 0) {
+      return [];
+    }
+
+    const entryIds = dailyEntries.map((e) => e.id);
+
+    // Fetch counts for food events
+    const { data: foodCounts, error: foodError } = await supabase
+      .from('food_events')
+      .select('daily_entry_id')
+      .in('daily_entry_id', entryIds);
+
+    if (foodError) handleSupabaseError(foodError, 'getDailySummaryRange - food_events');
+
+    // Fetch counts for bowel movements
+    const { data: bowelCounts, error: bowelError } = await supabase
+      .from('bowel_movements')
+      .select('daily_entry_id')
+      .in('daily_entry_id', entryIds);
+
+    if (bowelError) handleSupabaseError(bowelError, 'getDailySummaryRange - bowel_movements');
+
+    // Fetch exercise durations
+    const { data: exercises, error: exerciseError } = await supabase
+      .from('exercise_events')
+      .select('daily_entry_id, duration_minutes')
+      .in('daily_entry_id', entryIds);
+
+    if (exerciseError) handleSupabaseError(exerciseError, 'getDailySummaryRange - exercise_events');
+
+    // Fetch cycle logs
+    const { data: cycleLogs, error: cycleError } = await supabase
+      .from('cycle_logs')
+      .select('daily_entry_id')
+      .in('daily_entry_id', entryIds);
+
+    if (cycleError) handleSupabaseError(cycleError, 'getDailySummaryRange - cycle_logs');
+
+    // Fetch formulation intakes for adherence
+    const { data: formIntakes, error: formIntakesError } = await supabase
+      .from('regimen_formulation_intakes')
+      .select('daily_entry_id, status, regimen_formulation_id')
+      .in('daily_entry_id', entryIds);
+
+    if (formIntakesError) handleSupabaseError(formIntakesError, 'getDailySummaryRange - formulation_intakes');
+
+    // Fetch treatment completions for adherence
+    const { data: treatmentComps, error: treatmentCompsError } = await supabase
+      .from('regimen_treatment_completions')
+      .select('daily_entry_id, status, regimen_treatment_id')
+      .in('daily_entry_id', entryIds);
+
+    if (treatmentCompsError) handleSupabaseError(treatmentCompsError, 'getDailySummaryRange - treatment_completions');
+
+    // Get all active formulations/treatments per date to calculate adherence properly
+    const formulations = await supabase
+      .from('regimen_formulations')
+      .select('id, start_date, stop_date')
+      .eq('patient_id', patientId);
+
+    const treatments = await supabase
+      .from('regimen_treatments')
+      .select('id, start_date, stop_date')
+      .eq('patient_id', patientId);
+
+    // Build summary for each day
+    const summaries = dailyEntries.map((entry) => {
+      const date = entry.date;
+
+      // Count foods
+      const foodCount = (foodCounts || []).filter((f) => f.daily_entry_id === entry.id).length;
+
+      // Count bowel movements
+      const bowelCount = (bowelCounts || []).filter((b) => b.daily_entry_id === entry.id).length;
+
+      // Sum exercise minutes
+      const exerciseMinutes = (exercises || [])
+        .filter((e) => e.daily_entry_id === entry.id)
+        .reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+
+      // Check if cycle log exists
+      const hasCycleLog = (cycleLogs || []).some((c) => c.daily_entry_id === entry.id);
+
+      // Calculate formulation adherence
+      const activeFormulations = (formulations.data || []).filter((f) => {
+        const startOk = !f.start_date || f.start_date <= date;
+        const stopOk = !f.stop_date || f.stop_date >= date;
+        return startOk && stopOk;
+      });
+
+      const formIntakesForDay = (formIntakes || []).filter((i) => i.daily_entry_id === entry.id);
+      const takenFormulations = formIntakesForDay.filter((i) => i.status === 'taken' || i.status === 'partial').length;
+      const formAdherence = activeFormulations.length > 0
+        ? Math.round((takenFormulations / activeFormulations.length) * 100)
+        : 0;
+
+      // Calculate treatment adherence
+      const activeTreatments = (treatments.data || []).filter((t) => {
+        const startOk = !t.start_date || t.start_date <= date;
+        const stopOk = !t.stop_date || t.stop_date >= date;
+        return startOk && stopOk;
+      });
+
+      const treatmentCompsForDay = (treatmentComps || []).filter((c) => c.daily_entry_id === entry.id);
+      const completedTreatments = treatmentCompsForDay.filter((c) => c.status === 'completed' || c.status === 'partial').length;
+      const treatmentAdherence = activeTreatments.length > 0
+        ? Math.round((completedTreatments / activeTreatments.length) * 100)
+        : 0;
+
+      return {
+        date: entry.date,
+        energy_physical: entry.energy_physical,
+        energy_mental: entry.energy_mental,
+        energy_emotional: entry.energy_emotional,
+        energy_drive: entry.energy_drive,
+        overall_mood: entry.overall_mood,
+        food_count: foodCount,
+        bowel_movement_count: bowelCount,
+        exercise_minutes: exerciseMinutes,
+        formulation_adherence_percent: formAdherence,
+        treatment_adherence_percent: treatmentAdherence,
+        has_cycle_log: hasCycleLog,
+      };
+    });
+
+    return summaries;
+  } catch (error) {
+    handleSupabaseError(error, 'getDailySummaryRange');
+  }
+}

@@ -811,15 +811,19 @@ export async function getDailySummaryRange(patientId: string, fromDate: string, 
     if (treatmentCompsError) handleSupabaseError(treatmentCompsError, 'getDailySummaryRange - treatment_completions');
 
     // Get all active formulations/treatments per date to calculate adherence properly
-    const formulations = await supabase
+    const { data: formulations, error: formulationsError } = await supabase
       .from('regimen_formulations')
       .select('id, start_date, stop_date')
       .eq('patient_id', patientId);
 
-    const treatments = await supabase
+    if (formulationsError) handleSupabaseError(formulationsError, 'getDailySummaryRange - regimen_formulations');
+
+    const { data: treatments, error: treatmentsError } = await supabase
       .from('regimen_treatments')
       .select('id, start_date, stop_date')
       .eq('patient_id', patientId);
+
+    if (treatmentsError) handleSupabaseError(treatmentsError, 'getDailySummaryRange - regimen_treatments');
 
     // Build summary for each day
     const summaries = dailyEntries.map((entry) => {
@@ -840,27 +844,37 @@ export async function getDailySummaryRange(patientId: string, fromDate: string, 
       const hasCycleLog = (cycleLogs || []).some((c) => c.daily_entry_id === entry.id);
 
       // Calculate formulation adherence
-      const activeFormulations = (formulations.data || []).filter((f) => {
+      const activeFormulations = (formulations || []).filter((f) => {
         const startOk = !f.start_date || f.start_date <= date;
         const stopOk = !f.stop_date || f.stop_date >= date;
         return startOk && stopOk;
       });
 
+      const activeFormulationIds = new Set(activeFormulations.map((f) => f.id));
+
       const formIntakesForDay = (formIntakes || []).filter((i) => i.daily_entry_id === entry.id);
-      const takenFormulations = formIntakesForDay.filter((i) => i.status === 'taken' || i.status === 'partial').length;
+      // Only count intakes for formulations that are active on this date
+      const takenFormulations = formIntakesForDay.filter(
+        (i) => activeFormulationIds.has(i.regimen_formulation_id) && (i.status === 'taken' || i.status === 'partial')
+      ).length;
       const formAdherence = activeFormulations.length > 0
         ? Math.round((takenFormulations / activeFormulations.length) * 100)
         : 0;
 
       // Calculate treatment adherence
-      const activeTreatments = (treatments.data || []).filter((t) => {
+      const activeTreatments = (treatments || []).filter((t) => {
         const startOk = !t.start_date || t.start_date <= date;
         const stopOk = !t.stop_date || t.stop_date >= date;
         return startOk && stopOk;
       });
 
+      const activeTreatmentIds = new Set(activeTreatments.map((t) => t.id));
+
       const treatmentCompsForDay = (treatmentComps || []).filter((c) => c.daily_entry_id === entry.id);
-      const completedTreatments = treatmentCompsForDay.filter((c) => c.status === 'completed' || c.status === 'partial').length;
+      // Only count completions for treatments that are active on this date
+      const completedTreatments = treatmentCompsForDay.filter(
+        (c) => activeTreatmentIds.has(c.regimen_treatment_id) && (c.status === 'completed' || c.status === 'partial')
+      ).length;
       const treatmentAdherence = activeTreatments.length > 0
         ? Math.round((completedTreatments / activeTreatments.length) * 100)
         : 0;

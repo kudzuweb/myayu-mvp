@@ -28,6 +28,7 @@ export default function PatientTrackerPage() {
         setFromDate(defaultFrom.toISOString().split('T')[0]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load config');
+        setLoading(false);
         console.error('Error fetching patient config:', err);
       }
     };
@@ -152,12 +153,17 @@ export default function PatientTrackerPage() {
                 <div>
                   <h3 className="text-lg font-semibold">{summary.date}</h3>
                   <p className="text-sm text-gray-600">
-                    {new Date(summary.date).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                    {(() => {
+                      // Parse date as local to avoid timezone display issues
+                      const [year, month, day] = summary.date.split('-').map(Number);
+                      const localDate = new Date(year, month - 1, day);
+                      return localDate.toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      });
+                    })()}
                   </p>
                 </div>
                 <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">

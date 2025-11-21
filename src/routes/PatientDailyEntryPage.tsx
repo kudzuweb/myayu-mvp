@@ -174,7 +174,7 @@ export default function PatientDailyEntryPage() {
         <section id="formulations-treatments">
           <h2 className="text-2xl font-bold mb-4">Formulations & Treatments</h2>
           <div className="space-y-4">
-            <RegimenSection data={bundle} />
+            <RegimenSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
           </div>
         </section>
       </div>

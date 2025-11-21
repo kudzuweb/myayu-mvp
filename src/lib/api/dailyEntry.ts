@@ -700,3 +700,41 @@ export async function upsertRegimenNote(
     throw error;
   }
 }
+
+/**
+ * Get active formulations and treatments for a specific date
+ * Filters by start_date <= date <= stop_date (or no stop_date)
+ */
+export async function getRegimenForDate(patientId: string, date: string) {
+  try {
+    // Fetch active formulations
+    const { data: formulations, error: formulationsError } = await supabase
+      .from('regimen_formulations')
+      .select('*')
+      .eq('patient_id', patientId)
+      .lte('start_date', date)
+      .or(`stop_date.is.null,stop_date.gte.${date}`)
+      .order('created_at', { ascending: true });
+
+    if (formulationsError) handleSupabaseError(formulationsError, 'getRegimenForDate - formulations');
+
+    // Fetch active treatments
+    const { data: treatments, error: treatmentsError } = await supabase
+      .from('regimen_treatments')
+      .select('*')
+      .eq('patient_id', patientId)
+      .lte('start_date', date)
+      .or(`stop_date.is.null,stop_date.gte.${date}`)
+      .order('created_at', { ascending: true });
+
+    if (treatmentsError) handleSupabaseError(treatmentsError, 'getRegimenForDate - treatments');
+
+    return {
+      formulations: formulations || [],
+      treatments: treatments || [],
+    };
+  } catch (error) {
+    handleSupabaseError(error, 'getRegimenForDate');
+    throw error;
+  }
+}

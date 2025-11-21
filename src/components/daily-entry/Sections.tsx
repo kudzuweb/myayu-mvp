@@ -23,6 +23,9 @@ import {
   getCycleSavedSymptoms,
   addCycleSymptom,
   addCycleComment,
+  upsertFormulationIntake,
+  upsertTreatmentCompletion,
+  upsertRegimenNote,
 } from '../../lib/api/dailyEntry';
 
 // Reusable section wrapper
@@ -1939,46 +1942,348 @@ export function CycleSection({
 // FORMULATIONS & TREATMENTS SECTION
 // ============================================================================
 
-export function RegimenSection({ data }: { data: DailyEntryBundle }) {
+export function RegimenSection({
+  data,
+  editable,
+  onRefresh,
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void;
+}) {
   const formulations = data.regimenFormulations;
   const formulationIntakes = data.formulationIntakes;
   const treatments = data.regimenTreatments;
   const treatmentCompletions = data.treatmentCompletions;
   const regimenNotes = data.regimenNotes;
 
+  // State for formulation intakes
+  const [intakeState, setIntakeState] = useState<Record<string, { status: string; notes: string }>>(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    formulations.forEach((f) => {
+      const existing = formulationIntakes.find((i) => i.regimen_formulation_id === f.id);
+      initial[f.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    return initial;
+  });
+
+  // State for treatment completions
+  const [completionState, setCompletionState] = useState<Record<string, { status: string; notes: string }>>(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    treatments.forEach((t) => {
+      const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === t.id);
+      initial[t.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    return initial;
+  });
+
+  // State for regimen note
+  const [regimenNote, setRegimenNote] = useState(regimenNotes?.note || '');
+
+  // Sync intakeState when bundle changes
+  useEffect(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    formulations.forEach((f) => {
+      const existing = formulationIntakes.find((i) => i.regimen_formulation_id === f.id);
+      initial[f.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    setIntakeState(initial);
+  }, [formulations, formulationIntakes]);
+
+  // Sync completionState when bundle changes
+  useEffect(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    treatments.forEach((t) => {
+      const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === t.id);
+      initial[t.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    setCompletionState(initial);
+  }, [treatments, treatmentCompletions]);
+
+  // Sync regimenNote when bundle changes
+  useEffect(() => {
+    setRegimenNote(regimenNotes?.note || '');
+  }, [regimenNotes]);
+
+  // Handler for formulation intake status change
+  const handleIntakeStatusChange = useCallback(async (formulationId: string, status: 'taken' | 'skipped' | 'partial') => {
+    const currentNotes = intakeState[formulationId]?.notes;
+    setIntakeState((prev) => ({ ...prev, [formulationId]: { ...prev[formulationId], status } }));
+    try {
+      const existing = formulationIntakes.find((i) => i.regimen_formulation_id === formulationId);
+      await upsertFormulationIntake({
+        id: existing?.id,
+        regimen_formulation_id: formulationId,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        status,
+        notes: currentNotes || undefined,
+      });
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to update formulation intake:', error);
+    }
+  }, [formulationIntakes, data.dailyEntry.id, data.dailyEntry.patient_id, intakeState, onRefresh]);
+
+  // Handler for formulation intake notes change
+  const handleIntakeNotesChange = useCallback(async (formulationId: string, notes: string) => {
+    setIntakeState((prev) => ({ ...prev, [formulationId]: { ...prev[formulationId], notes } }));
+  }, []);
+
+  const handleIntakeNotesBlur = useCallback(async (formulationId: string) => {
+    const currentStatus = intakeState[formulationId]?.status;
+    const statusToSend = currentStatus === '' ? undefined : currentStatus as 'taken' | 'skipped' | 'partial' | undefined;
+    const currentNotes = intakeState[formulationId]?.notes;
+    try {
+      const existing = formulationIntakes.find((i) => i.regimen_formulation_id === formulationId);
+      await upsertFormulationIntake({
+        id: existing?.id,
+        regimen_formulation_id: formulationId,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        status: statusToSend,
+        notes: currentNotes || undefined,
+      });
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to update formulation notes:', error);
+    }
+  }, [formulationIntakes, data.dailyEntry.id, data.dailyEntry.patient_id, intakeState, onRefresh]);
+
+  // Handler for treatment completion status change
+  const handleCompletionStatusChange = useCallback(async (treatmentId: string, status: 'completed' | 'skipped' | 'partial') => {
+    const currentNotes = completionState[treatmentId]?.notes;
+    setCompletionState((prev) => ({ ...prev, [treatmentId]: { ...prev[treatmentId], status } }));
+    try {
+      const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === treatmentId);
+      await upsertTreatmentCompletion({
+        id: existing?.id,
+        regimen_treatment_id: treatmentId,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        status,
+        notes: currentNotes || undefined,
+      });
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to update treatment completion:', error);
+    }
+  }, [treatmentCompletions, data.dailyEntry.id, data.dailyEntry.patient_id, completionState, onRefresh]);
+
+  // Handler for treatment completion notes change
+  const handleCompletionNotesChange = useCallback(async (treatmentId: string, notes: string) => {
+    setCompletionState((prev) => ({ ...prev, [treatmentId]: { ...prev[treatmentId], notes } }));
+  }, []);
+
+  const handleCompletionNotesBlur = useCallback(async (treatmentId: string) => {
+    const currentStatus = completionState[treatmentId]?.status;
+    const statusToSend = currentStatus === '' ? undefined : currentStatus as 'completed' | 'skipped' | 'partial' | undefined;
+    const currentNotes = completionState[treatmentId]?.notes;
+    try {
+      const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === treatmentId);
+      await upsertTreatmentCompletion({
+        id: existing?.id,
+        regimen_treatment_id: treatmentId,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        status: statusToSend,
+        notes: currentNotes || undefined,
+      });
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to update treatment notes:', error);
+    }
+  }, [treatmentCompletions, data.dailyEntry.id, data.dailyEntry.patient_id, completionState, onRefresh]);
+
+  // Handler for regimen note
+  const handleRegimenNoteBlur = useCallback(async () => {
+    try {
+      await upsertRegimenNote({
+        id: regimenNotes?.id,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        note: regimenNote || undefined,
+      });
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to update regimen note:', error);
+    }
+  }, [regimenNote, regimenNotes?.id, data.dailyEntry.id, data.dailyEntry.patient_id, onRefresh]);
+
+  if (!editable) {
+    // Read-only view
+    return (
+      <Section title="Formulations & Treatments">
+        {formulations.length > 0 && (
+          <div className="mb-6">
+            <h4 className="font-medium mb-3">Formulations:</h4>
+            <div className="space-y-3">
+              {formulations.map((formulation) => {
+                const intake = formulationIntakes.find(
+                  (i) => i.regimen_formulation_id === formulation.id
+                );
+                return (
+                  <div key={formulation.id} className="border-l-2 border-teal-300 pl-3">
+                    <div className="font-medium text-sm">{formulation.name}</div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      {formulation.when_label && <div>When: {formulation.when_label}</div>}
+                      {formulation.dose && <div>Dose: {formulation.dose}</div>}
+                      {formulation.with_text && <div>With: {formulation.with_text}</div>}
+                    </div>
+                    {intake && (
+                      <div className="mt-1">
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          intake.status === 'taken' ? 'bg-green-100 text-green-800' :
+                          intake.status === 'skipped' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {intake.status}
+                        </span>
+                        {intake.notes && <p className="text-xs text-gray-600 mt-1">{intake.notes}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {treatments.length > 0 && (
+          <div className="mb-6">
+            <h4 className="font-medium mb-3">Treatments:</h4>
+            <div className="space-y-3">
+              {treatments.map((treatment) => {
+                const completion = treatmentCompletions.find(
+                  (c) => c.regimen_treatment_id === treatment.id
+                );
+                return (
+                  <div key={treatment.id} className="border-l-2 border-indigo-300 pl-3">
+                    <div className="font-medium text-sm">{treatment.name}</div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      {treatment.when_label && <div>When: {treatment.when_label}</div>}
+                      {treatment.body_region && <div>Region: {treatment.body_region}</div>}
+                    </div>
+                    {completion && (
+                      <div className="mt-1">
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          completion.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          completion.status === 'skipped' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {completion.status}
+                        </span>
+                        {completion.notes && <p className="text-xs text-gray-600 mt-1">{completion.notes}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {regimenNotes && (
+          <div className="pt-4 border-t">
+            <h4 className="font-medium text-sm mb-2">Notes:</h4>
+            {regimenNotes.note && (
+              <div className="text-sm mb-2">
+                <span className="font-medium text-gray-600">Your note:</span>
+                <p className="text-gray-700 mt-1">{regimenNotes.note}</p>
+              </div>
+            )}
+            {regimenNotes.reply && (
+              <div className="text-sm bg-blue-50 p-2 rounded">
+                <span className="font-medium text-gray-600">
+                  Reply from {regimenNotes.reply_from}:
+                </span>
+                <p className="text-gray-700 mt-1">{regimenNotes.reply}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {formulations.length === 0 && treatments.length === 0 && (
+          <NoData message="No formulations or treatments configured" />
+        )}
+      </Section>
+    );
+  }
+
+  // Editable view
   return (
     <Section title="Formulations & Treatments">
       {/* Formulations */}
       {formulations.length > 0 && (
         <div className="mb-6">
           <h4 className="font-medium mb-3">Formulations:</h4>
-          <div className="space-y-3">
-            {formulations.map((formulation) => {
-              const intake = formulationIntakes.find(
-                (i) => i.regimen_formulation_id === formulation.id
-              );
-              return (
-                <div key={formulation.id} className="border-l-2 border-teal-300 pl-3">
-                  <div className="font-medium text-sm">{formulation.name}</div>
-                  <div className="text-xs text-gray-600 space-y-1">
-                    {formulation.when_label && <div>When: {formulation.when_label}</div>}
-                    {formulation.dose && <div>Dose: {formulation.dose}</div>}
-                    {formulation.with_text && <div>With: {formulation.with_text}</div>}
-                  </div>
-                  {intake && (
-                    <div className="mt-1">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        intake.status === 'taken' ? 'bg-green-100 text-green-800' :
-                        intake.status === 'skipped' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {intake.status}
-                      </span>
-                    </div>
-                  )}
+          <div className="space-y-4">
+            {formulations.map((formulation) => (
+              <div key={formulation.id} className="border-l-2 border-teal-300 pl-3 pb-3">
+                <div className="font-medium text-sm mb-1">{formulation.name}</div>
+                <div className="text-xs text-gray-600 space-y-1 mb-2">
+                  {formulation.when_label && <div>When: {formulation.when_label}</div>}
+                  {formulation.dose && <div>Dose: {formulation.dose}</div>}
+                  {formulation.with_text && <div>With: {formulation.with_text}</div>}
                 </div>
-              );
-            })}
+
+                {/* Status buttons */}
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => handleIntakeStatusChange(formulation.id, 'taken')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      intakeState[formulation.id]?.status === 'taken'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Taken
+                  </button>
+                  <button
+                    onClick={() => handleIntakeStatusChange(formulation.id, 'partial')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      intakeState[formulation.id]?.status === 'partial'
+                        ? 'bg-yellow-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Partial
+                  </button>
+                  <button
+                    onClick={() => handleIntakeStatusChange(formulation.id, 'skipped')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      intakeState[formulation.id]?.status === 'skipped'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Skipped
+                  </button>
+                </div>
+
+                {/* Notes textarea */}
+                <textarea
+                  value={intakeState[formulation.id]?.notes || ''}
+                  onChange={(e) => handleIntakeNotesChange(formulation.id, e.target.value)}
+                  onBlur={() => handleIntakeNotesBlur(formulation.id)}
+                  placeholder="Optional notes..."
+                  className="w-full px-2 py-1 text-xs border rounded"
+                  rows={2}
+                />
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1987,56 +2292,86 @@ export function RegimenSection({ data }: { data: DailyEntryBundle }) {
       {treatments.length > 0 && (
         <div className="mb-6">
           <h4 className="font-medium mb-3">Treatments:</h4>
-          <div className="space-y-3">
-            {treatments.map((treatment) => {
-              const completion = treatmentCompletions.find(
-                (c) => c.regimen_treatment_id === treatment.id
-              );
-              return (
-                <div key={treatment.id} className="border-l-2 border-indigo-300 pl-3">
-                  <div className="font-medium text-sm">{treatment.name}</div>
-                  <div className="text-xs text-gray-600 space-y-1">
-                    {treatment.when_label && <div>When: {treatment.when_label}</div>}
-                    {treatment.body_region && <div>Region: {treatment.body_region}</div>}
-                  </div>
-                  {completion && (
-                    <div className="mt-1">
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        completion.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        completion.status === 'skipped' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {completion.status}
-                      </span>
-                    </div>
-                  )}
+          <div className="space-y-4">
+            {treatments.map((treatment) => (
+              <div key={treatment.id} className="border-l-2 border-indigo-300 pl-3 pb-3">
+                <div className="font-medium text-sm mb-1">{treatment.name}</div>
+                <div className="text-xs text-gray-600 space-y-1 mb-2">
+                  {treatment.when_label && <div>When: {treatment.when_label}</div>}
+                  {treatment.body_region && <div>Region: {treatment.body_region}</div>}
                 </div>
-              );
-            })}
+
+                {/* Status buttons */}
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => handleCompletionStatusChange(treatment.id, 'completed')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      completionState[treatment.id]?.status === 'completed'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Completed
+                  </button>
+                  <button
+                    onClick={() => handleCompletionStatusChange(treatment.id, 'partial')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      completionState[treatment.id]?.status === 'partial'
+                        ? 'bg-yellow-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Partial
+                  </button>
+                  <button
+                    onClick={() => handleCompletionStatusChange(treatment.id, 'skipped')}
+                    className={`px-3 py-1 text-xs rounded ${
+                      completionState[treatment.id]?.status === 'skipped'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Skipped
+                  </button>
+                </div>
+
+                {/* Notes textarea */}
+                <textarea
+                  value={completionState[treatment.id]?.notes || ''}
+                  onChange={(e) => handleCompletionNotesChange(treatment.id, e.target.value)}
+                  onBlur={() => handleCompletionNotesBlur(treatment.id)}
+                  placeholder="Optional notes..."
+                  className="w-full px-2 py-1 text-xs border rounded"
+                  rows={2}
+                />
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Notes */}
-      {regimenNotes && (
-        <div className="pt-4 border-t">
-          <h4 className="font-medium text-sm mb-2">Notes:</h4>
-          {regimenNotes.note && (
-            <div className="text-sm mb-2">
-              <span className="font-medium text-gray-600">Your note:</span>
-              <p className="text-gray-700 mt-1">{regimenNotes.note}</p>
-            </div>
-          )}
-          {regimenNotes.reply && (
-            <div className="text-sm bg-blue-50 p-2 rounded">
-              <span className="font-medium text-gray-600">
-                Reply from {regimenNotes.reply_from}:
-              </span>
-              <p className="text-gray-700 mt-1">{regimenNotes.reply}</p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Regimen Notes */}
+      <div className="pt-4 border-t">
+        <h4 className="font-medium text-sm mb-2">Your Notes:</h4>
+        <textarea
+          value={regimenNote}
+          onChange={(e) => setRegimenNote(e.target.value)}
+          onBlur={handleRegimenNoteBlur}
+          placeholder="Add your notes about formulations and treatments..."
+          className="w-full px-3 py-2 text-sm border rounded"
+          rows={3}
+        />
+
+        {/* Clinician reply (read-only) */}
+        {regimenNotes?.reply && (
+          <div className="text-sm bg-blue-50 p-2 rounded mt-2">
+            <span className="font-medium text-gray-600">
+              Reply from {regimenNotes.reply_from}:
+            </span>
+            <p className="text-gray-700 mt-1">{regimenNotes.reply}</p>
+          </div>
+        )}
+      </div>
 
       {formulations.length === 0 && treatments.length === 0 && (
         <NoData message="No formulations or treatments configured" />

@@ -166,7 +166,7 @@ export default function PatientDailyEntryPage() {
         <section id="cycle-tracking">
           <h2 className="text-2xl font-bold mb-4">Cycle Tracking</h2>
           <div className="space-y-4">
-            <CycleSection data={bundle} />
+            <CycleSection data={bundle} editable={isEditable} onRefresh={fetchBundle} />
           </div>
         </section>
 

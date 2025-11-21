@@ -1986,6 +1986,37 @@ export function RegimenSection({
   // State for regimen note
   const [regimenNote, setRegimenNote] = useState(regimenNotes?.note || '');
 
+  // Sync intakeState when bundle changes
+  useEffect(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    formulations.forEach((f) => {
+      const existing = formulationIntakes.find((i) => i.regimen_formulation_id === f.id);
+      initial[f.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    setIntakeState(initial);
+  }, [formulations, formulationIntakes]);
+
+  // Sync completionState when bundle changes
+  useEffect(() => {
+    const initial: Record<string, { status: string; notes: string }> = {};
+    treatments.forEach((t) => {
+      const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === t.id);
+      initial[t.id] = {
+        status: existing?.status || '',
+        notes: existing?.notes || '',
+      };
+    });
+    setCompletionState(initial);
+  }, [treatments, treatmentCompletions]);
+
+  // Sync regimenNote when bundle changes
+  useEffect(() => {
+    setRegimenNote(regimenNotes?.note || '');
+  }, [regimenNotes]);
+
   // Handler for formulation intake status change
   const handleIntakeStatusChange = useCallback(async (formulationId: string, status: 'taken' | 'skipped' | 'partial') => {
     const currentNotes = intakeState[formulationId]?.notes;
@@ -2012,7 +2043,8 @@ export function RegimenSection({
   }, []);
 
   const handleIntakeNotesBlur = useCallback(async (formulationId: string) => {
-    const currentStatus = intakeState[formulationId]?.status as 'taken' | 'skipped' | 'partial' | undefined;
+    const currentStatus = intakeState[formulationId]?.status;
+    const statusToSend = currentStatus === '' ? undefined : currentStatus as 'taken' | 'skipped' | 'partial' | undefined;
     const currentNotes = intakeState[formulationId]?.notes;
     try {
       const existing = formulationIntakes.find((i) => i.regimen_formulation_id === formulationId);
@@ -2021,7 +2053,7 @@ export function RegimenSection({
         regimen_formulation_id: formulationId,
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
-        status: currentStatus,
+        status: statusToSend,
         notes: currentNotes || undefined,
       });
       onRefresh?.();
@@ -2056,7 +2088,8 @@ export function RegimenSection({
   }, []);
 
   const handleCompletionNotesBlur = useCallback(async (treatmentId: string) => {
-    const currentStatus = completionState[treatmentId]?.status as 'completed' | 'skipped' | 'partial' | undefined;
+    const currentStatus = completionState[treatmentId]?.status;
+    const statusToSend = currentStatus === '' ? undefined : currentStatus as 'completed' | 'skipped' | 'partial' | undefined;
     const currentNotes = completionState[treatmentId]?.notes;
     try {
       const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === treatmentId);
@@ -2065,7 +2098,7 @@ export function RegimenSection({
         regimen_treatment_id: treatmentId,
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
-        status: currentStatus,
+        status: statusToSend,
         notes: currentNotes || undefined,
       });
       onRefresh?.();

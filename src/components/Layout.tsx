@@ -1,6 +1,9 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 
+// Dev patient ID from seed data
+const DEV_PATIENT_ID = '11111111-1111-1111-1111-111111111111';
+
 export default function Layout() {
   const [role, setRole] = useState<'patient' | 'clinician'>('patient');
   const location = useLocation();
@@ -43,16 +46,28 @@ export default function Layout() {
                     </Link>
                   </>
                 ) : (
-                  <Link
-                    to="/clinician/tracker/dev-patient-id"
-                    className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                      location.pathname.startsWith('/clinician/tracker')
-                        ? 'text-blue-700 bg-blue-50'
-                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                  >
-                    Patient Tracker
-                  </Link>
+                  <>
+                    <Link
+                      to={`/clinician/tracker/${DEV_PATIENT_ID}`}
+                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                        location.pathname.startsWith('/clinician/tracker')
+                          ? 'text-blue-700 bg-blue-50'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      Patient Tracker
+                    </Link>
+                    <Link
+                      to={`/clinician/daily/${DEV_PATIENT_ID}`}
+                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                        location.pathname.startsWith('/clinician/daily')
+                          ? 'text-blue-700 bg-blue-50'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      Daily Entry
+                    </Link>
+                  </>
                 )}
               </div>
             </div>

@@ -334,7 +334,15 @@ export function EarlyMorningSection({ data, editable }: { data: DailyEntryBundle
   );
 }
 
-export function FoodFluidSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
+export function FoodFluidSection({
+  data,
+  editable,
+  onRefresh
+}: {
+  data: DailyEntryBundle;
+  editable?: boolean;
+  onRefresh?: () => void | Promise<void>;
+}) {
   const foodEvents = data.foodEvents;
   const fluidTotals = data.fluidTotals;
 
@@ -400,21 +408,22 @@ export function FoodFluidSection({ data, editable }: { data: DailyEntryBundle; e
       // Reset form
       setNewFood({ meal_type: 'breakfast', time: '', description: '' });
 
-      // Reload page to show new event
-      window.location.reload();
+      // Refresh data without losing unsaved changes
+      if (onRefresh) await onRefresh();
     } catch (error) {
       console.error('Failed to add food event:', error);
     }
-  }, [newFood, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date]);
+  }, [newFood, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date, onRefresh]);
 
   const handleDeleteFood = useCallback(async (id: string) => {
     try {
       await deleteFoodEvent(id);
-      window.location.reload();
+      // Refresh data without losing unsaved changes
+      if (onRefresh) await onRefresh();
     } catch (error) {
       console.error('Failed to delete food event:', error);
     }
-  }, []);
+  }, [onRefresh]);
 
   return (
     <Section title="Food & Fluids">

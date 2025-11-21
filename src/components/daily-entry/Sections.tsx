@@ -1,7 +1,13 @@
 // Daily Entry Section Components
 import { useState, useCallback } from 'react';
 import type { DailyEntryBundle } from '../../types/db';
-import { upsertSleepBlock } from '../../lib/api/dailyEntry';
+import {
+  upsertSleepBlock,
+  upsertEarlyMorning,
+  addFoodEvent,
+  deleteFoodEvent,
+  upsertFluidTotals,
+} from '../../lib/api/dailyEntry';
 
 // Reusable section wrapper
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -218,91 +224,340 @@ export function SleepSection({ data, editable }: { data: DailyEntryBundle; edita
   );
 }
 
-export function EarlyMorningSection({ data }: { data: DailyEntryBundle }) {
+export function EarlyMorningSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
   const earlyMorning = data.earlyMorning;
 
-  if (!earlyMorning) {
+  // Helper to extract time from ISO string
+  const toTime = (isoString: string | undefined) => {
+    if (!isoString) return '';
+    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+  };
+
+  const [formData, setFormData] = useState({
+    hygiene_routine: earlyMorning?.hygiene_routine || '',
+    first_drink: earlyMorning?.first_drink || '',
+    first_drink_time: toTime(earlyMorning?.first_drink_time),
+  });
+
+  const handleSave = useCallback(async () => {
+    try {
+      // Combine today's date with the time for first_drink_time
+      const first_drink_timestamp = formData.first_drink_time
+        ? new Date(`${data.dailyEntry.date}T${formData.first_drink_time}`).toISOString()
+        : undefined;
+
+      await upsertEarlyMorning({
+        id: earlyMorning?.id,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        hygiene_routine: formData.hygiene_routine || undefined,
+        first_drink: formData.first_drink || undefined,
+        first_drink_time: first_drink_timestamp,
+      });
+    } catch (error) {
+      console.error('Failed to save early morning data:', error);
+    }
+  }, [formData, earlyMorning?.id, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date]);
+
+  if (!editable && !earlyMorning) {
     return <Section title="Early Morning"><NoData message="No early morning data" /></Section>;
   }
 
   return (
     <Section title="Early Morning">
-      <div className="space-y-2 text-sm">
-        {earlyMorning.hygiene_routine && (
+      {editable ? (
+        <div className="space-y-3">
           <div>
-            <span className="font-medium">Hygiene routine:</span> {earlyMorning.hygiene_routine}
+            <label className="block text-sm font-medium mb-1">Hygiene routine</label>
+            <input
+              type="text"
+              value={formData.hygiene_routine}
+              onChange={(e) => setFormData({ ...formData, hygiene_routine: e.target.value })}
+              onBlur={handleSave}
+              placeholder="e.g., Shower, skincare"
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
           </div>
-        )}
-        {earlyMorning.first_drink && (
           <div>
-            <span className="font-medium">First drink:</span> {earlyMorning.first_drink}
-            {earlyMorning.first_drink_time && (
-              <span className="text-gray-600">
-                {' '}at {new Date(earlyMorning.first_drink_time).toLocaleTimeString()}
-              </span>
-            )}
+            <label className="block text-sm font-medium mb-1">First drink</label>
+            <input
+              type="text"
+              value={formData.first_drink}
+              onChange={(e) => setFormData({ ...formData, first_drink: e.target.value })}
+              onBlur={handleSave}
+              placeholder="e.g., Warm lemon water"
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
           </div>
-        )}
-      </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">First drink time</label>
+            <input
+              type="time"
+              value={formData.first_drink_time}
+              onChange={(e) => setFormData({ ...formData, first_drink_time: e.target.value })}
+              onBlur={handleSave}
+              className="w-32 px-3 py-2 border rounded text-sm"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {earlyMorning?.hygiene_routine && (
+            <div>
+              <span className="font-medium">Hygiene routine:</span> {earlyMorning.hygiene_routine}
+            </div>
+          )}
+          {earlyMorning?.first_drink && (
+            <div>
+              <span className="font-medium">First drink:</span> {earlyMorning.first_drink}
+              {earlyMorning.first_drink_time && (
+                <span className="text-gray-600">
+                  {' '}at {new Date(earlyMorning.first_drink_time).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
 
-export function FoodFluidSection({ data }: { data: DailyEntryBundle}) {
+export function FoodFluidSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
   const foodEvents = data.foodEvents;
   const fluidTotals = data.fluidTotals;
 
+  // Helper to extract time from ISO string
+  const toTime = (isoString: string | undefined) => {
+    if (!isoString) return '';
+    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+  };
+
+  const [fluidData, setFluidData] = useState({
+    total_water_oz: fluidTotals?.total_water_oz?.toString() || '',
+    total_caffeine_oz: fluidTotals?.total_caffeine_oz?.toString() || '',
+    total_other_oz: fluidTotals?.total_other_oz?.toString() || '',
+  });
+
+  const [newFood, setNewFood] = useState({
+    meal_type: 'breakfast' as const,
+    time: '',
+    description: '',
+  });
+
+  const handleSaveFluids = useCallback(async () => {
+    try {
+      await upsertFluidTotals({
+        id: fluidTotals?.id,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        total_water_oz: fluidData.total_water_oz ? parseFloat(fluidData.total_water_oz) : undefined,
+        total_caffeine_oz: fluidData.total_caffeine_oz ? parseFloat(fluidData.total_caffeine_oz) : undefined,
+        total_other_oz: fluidData.total_other_oz ? parseFloat(fluidData.total_other_oz) : undefined,
+      });
+    } catch (error) {
+      console.error('Failed to save fluid totals:', error);
+    }
+  }, [fluidData, fluidTotals?.id, data.dailyEntry.id, data.dailyEntry.patient_id]);
+
+  const handleAddFood = useCallback(async () => {
+    if (!newFood.description) return;
+
+    try {
+      const timestamp = newFood.time
+        ? new Date(`${data.dailyEntry.date}T${newFood.time}`).toISOString()
+        : undefined;
+
+      await addFoodEvent({
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        meal_type: newFood.meal_type,
+        time: timestamp,
+        description: newFood.description,
+      });
+
+      // Reset form
+      setNewFood({ meal_type: 'breakfast', time: '', description: '' });
+
+      // Reload page to show new event
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to add food event:', error);
+    }
+  }, [newFood, data.dailyEntry.id, data.dailyEntry.patient_id, data.dailyEntry.date]);
+
+  const handleDeleteFood = useCallback(async (id: string) => {
+    try {
+      await deleteFoodEvent(id);
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to delete food event:', error);
+    }
+  }, []);
+
   return (
     <Section title="Food & Fluids">
-      {/* Food Events */}
-      {foodEvents.length > 0 ? (
-        <div className="mb-4">
-          <h4 className="font-medium text-sm mb-2">Meals & Snacks:</h4>
-          <div className="space-y-2">
-            {foodEvents.map((event) => (
-              <div key={event.id} className="text-sm pl-3 border-l-2 border-blue-200">
-                <div className="font-medium capitalize">{event.meal_type || 'Meal'}</div>
-                {event.time && (
-                  <div className="text-gray-600 text-xs">
-                    {new Date(event.time).toLocaleTimeString()}
+      {editable ? (
+        <div className="space-y-4">
+          {/* Food Events */}
+          <div>
+            <h4 className="font-medium text-sm mb-2">Meals & Snacks:</h4>
+            {foodEvents.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {foodEvents.map((event) => (
+                  <div key={event.id} className="flex justify-between items-start text-sm pl-3 border-l-2 border-blue-200 py-1">
+                    <div>
+                      <div className="font-medium capitalize">{event.meal_type || 'Meal'}</div>
+                      {event.time && (
+                        <div className="text-gray-600 text-xs">
+                          {new Date(event.time).toLocaleTimeString()}
+                        </div>
+                      )}
+                      {event.description && (
+                        <div className="text-gray-700">{event.description}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteFood(event.id)}
+                      className="text-red-600 hover:text-red-800 text-xs ml-2"
+                    >
+                      Delete
+                    </button>
                   </div>
-                )}
-                {event.description && (
-                  <div className="text-gray-700">{event.description}</div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Add new food event */}
+            <div className="border rounded p-3 bg-gray-50 space-y-2">
+              <div className="flex gap-2">
+                <select
+                  value={newFood.meal_type}
+                  onChange={(e) => setNewFood({ ...newFood, meal_type: e.target.value as any })}
+                  className="px-2 py-1 border rounded text-sm"
+                >
+                  <option value="breakfast">Breakfast</option>
+                  <option value="lunch">Lunch</option>
+                  <option value="dinner">Dinner</option>
+                  <option value="snack">Snack</option>
+                  <option value="other">Other</option>
+                </select>
+                <input
+                  type="time"
+                  value={newFood.time}
+                  onChange={(e) => setNewFood({ ...newFood, time: e.target.value })}
+                  className="w-32 px-2 py-1 border rounded text-sm"
+                />
+              </div>
+              <input
+                type="text"
+                value={newFood.description}
+                onChange={(e) => setNewFood({ ...newFood, description: e.target.value })}
+                placeholder="What did you eat?"
+                className="w-full px-2 py-1 border rounded text-sm"
+              />
+              <button
+                onClick={handleAddFood}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+              >
+                + Add Food
+              </button>
+            </div>
+          </div>
+
+          {/* Fluid Totals */}
+          <div className="pt-4 border-t">
+            <h4 className="font-medium text-sm mb-2">Fluid Totals (oz):</h4>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Water</label>
+                <input
+                  type="number"
+                  value={fluidData.total_water_oz}
+                  onChange={(e) => setFluidData({ ...fluidData, total_water_oz: e.target.value })}
+                  onBlur={handleSaveFluids}
+                  placeholder="0"
+                  className="w-full px-2 py-1 border rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Caffeine</label>
+                <input
+                  type="number"
+                  value={fluidData.total_caffeine_oz}
+                  onChange={(e) => setFluidData({ ...fluidData, total_caffeine_oz: e.target.value })}
+                  onBlur={handleSaveFluids}
+                  placeholder="0"
+                  className="w-full px-2 py-1 border rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Other</label>
+                <input
+                  type="number"
+                  value={fluidData.total_other_oz}
+                  onChange={(e) => setFluidData({ ...fluidData, total_other_oz: e.target.value })}
+                  onBlur={handleSaveFluids}
+                  placeholder="0"
+                  className="w-full px-2 py-1 border rounded text-sm"
+                />
+              </div>
+            </div>
           </div>
         </div>
       ) : (
-        <NoData message="No food logged" />
-      )}
+        <>
+          {/* Food Events */}
+          {foodEvents.length > 0 ? (
+            <div className="mb-4">
+              <h4 className="font-medium text-sm mb-2">Meals & Snacks:</h4>
+              <div className="space-y-2">
+                {foodEvents.map((event) => (
+                  <div key={event.id} className="text-sm pl-3 border-l-2 border-blue-200">
+                    <div className="font-medium capitalize">{event.meal_type || 'Meal'}</div>
+                    {event.time && (
+                      <div className="text-gray-600 text-xs">
+                        {new Date(event.time).toLocaleTimeString()}
+                      </div>
+                    )}
+                    {event.description && (
+                      <div className="text-gray-700">{event.description}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <NoData message="No food logged" />
+          )}
 
-      {/* Fluid Totals */}
-      {fluidTotals && (
-        <div className="mt-4 pt-4 border-t">
-          <h4 className="font-medium text-sm mb-2">Fluid Totals:</h4>
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            {fluidTotals.total_water_oz !== null && (
-              <div>
-                <span className="text-gray-600">Water:</span>
-                <span className="font-medium ml-1">{fluidTotals.total_water_oz} oz</span>
+          {/* Fluid Totals */}
+          {fluidTotals && (
+            <div className="mt-4 pt-4 border-t">
+              <h4 className="font-medium text-sm mb-2">Fluid Totals:</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                {fluidTotals.total_water_oz !== null && (
+                  <div>
+                    <span className="text-gray-600">Water:</span>
+                    <span className="font-medium ml-1">{fluidTotals.total_water_oz} oz</span>
+                  </div>
+                )}
+                {fluidTotals.total_caffeine_oz !== null && (
+                  <div>
+                    <span className="text-gray-600">Caffeine:</span>
+                    <span className="font-medium ml-1">{fluidTotals.total_caffeine_oz} oz</span>
+                  </div>
+                )}
+                {fluidTotals.total_other_oz !== null && (
+                  <div>
+                    <span className="text-gray-600">Other:</span>
+                    <span className="font-medium ml-1">{fluidTotals.total_other_oz} oz</span>
+                  </div>
+                )}
               </div>
-            )}
-            {fluidTotals.total_caffeine_oz !== null && (
-              <div>
-                <span className="text-gray-600">Caffeine:</span>
-                <span className="font-medium ml-1">{fluidTotals.total_caffeine_oz} oz</span>
-              </div>
-            )}
-            {fluidTotals.total_other_oz !== null && (
-              <div>
-                <span className="text-gray-600">Other:</span>
-                <span className="font-medium ml-1">{fluidTotals.total_other_oz} oz</span>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
     </Section>
   );

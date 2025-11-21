@@ -150,8 +150,8 @@ export default function PatientDailyEntryPage() {
           <h2 className="text-2xl font-bold mb-4">Daily Tracking</h2>
           <div className="space-y-4">
             <SleepSection data={bundle} editable={isEditable} />
-            <EarlyMorningSection data={bundle} />
-            <FoodFluidSection data={bundle} />
+            <EarlyMorningSection data={bundle} editable={isEditable} />
+            <FoodFluidSection data={bundle} editable={isEditable} />
             <BowelSection data={bundle} />
             <ExerciseSection data={bundle} />
             <EnergySection data={bundle} />

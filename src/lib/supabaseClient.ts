@@ -18,10 +18,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
  * Logs the error and rethrows it for caller to handle
  */
 export function handleSupabaseError(error: unknown, context?: string): never {
-  const errorMessage = context
-    ? `Supabase error in ${context}: ${error}`
-    : `Supabase error: ${error}`;
+  const errorDetail = error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error !== null
+    ? JSON.stringify(error, null, 2)
+    : String(error);
 
-  console.error(errorMessage);
+  const errorMessage = context
+    ? `Supabase error in ${context}: ${errorDetail}`
+    : `Supabase error: ${errorDetail}`;
+
+  console.error(errorMessage, error);
   throw new Error(errorMessage);
 }

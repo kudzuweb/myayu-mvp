@@ -31,15 +31,23 @@ function NoData({ message }: { message: string }) {
 export function SleepSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
   const sleepBlock = data.sleepBlocks[0]; // Typically one per day
 
-  // Helper to extract date and time from ISO string
+  // Helper to extract date from ISO string (in local timezone)
   const toDate = (isoString: string | undefined) => {
     if (!isoString) return '';
-    return new Date(isoString).toISOString().slice(0, 10); // YYYY-MM-DD
+    const date = new Date(isoString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
+  // Helper to extract time from ISO string (in local timezone)
   const toTime = (isoString: string | undefined) => {
     if (!isoString) return '';
-    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+    const date = new Date(isoString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   // Local state for editable mode - store date/time separately
@@ -227,10 +235,13 @@ export function SleepSection({ data, editable }: { data: DailyEntryBundle; edita
 export function EarlyMorningSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
   const earlyMorning = data.earlyMorning;
 
-  // Helper to extract time from ISO string
+  // Helper to extract time from ISO string (in local timezone)
   const toTime = (isoString: string | undefined) => {
     if (!isoString) return '';
-    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+    const date = new Date(isoString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   const [formData, setFormData] = useState({
@@ -327,10 +338,13 @@ export function FoodFluidSection({ data, editable }: { data: DailyEntryBundle; e
   const foodEvents = data.foodEvents;
   const fluidTotals = data.fluidTotals;
 
-  // Helper to extract time from ISO string
+  // Helper to extract time from ISO string (in local timezone)
   const toTime = (isoString: string | undefined) => {
     if (!isoString) return '';
-    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+    const date = new Date(isoString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   const [fluidData, setFluidData] = useState({

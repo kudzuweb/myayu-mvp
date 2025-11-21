@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getDailyEntryBundle } from '../lib/api/dailyEntry';
-import type { DailyEntryBundle } from '../types/db';
+import { differenceInCalendarDays } from 'date-fns';
+import { getDailyEntryBundle, getPatientConfig } from '../lib/api/dailyEntry';
+import type { DailyEntryBundle, PatientConfig } from '../types/db';
 import {
   SleepSection,
   EarlyMorningSection,
@@ -23,8 +24,29 @@ export default function PatientDailyEntryPage() {
     return new Date().toISOString().split('T')[0]; // Today as YYYY-MM-DD
   });
   const [bundle, setBundle] = useState<DailyEntryBundle | null>(null);
+  const [patientConfig, setPatientConfig] = useState<PatientConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Calculate if the selected date is editable
+  const isEditable = patientConfig
+    ? differenceInCalendarDays(new Date(), new Date(selectedDate)) <= patientConfig.edit_window_days
+    : false;
+
+  // Fetch patient config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const config = await getPatientConfig(DEV_PATIENT_ID);
+        setPatientConfig(config);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load config');
+        console.error('Error fetching patient config:', err);
+      }
+    };
+
+    fetchConfig();
+  }, []);
 
   // Fetch bundle when date changes
   useEffect(() => {
@@ -85,7 +107,20 @@ export default function PatientDailyEntryPage() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Date Controls */}
       <div className="mb-6 flex items-center justify-between sticky top-0 bg-gray-50 py-4 z-10">
-        <h1 className="text-3xl font-bold">Daily Entry</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Daily Entry</h1>
+          {patientConfig && (
+            <p className="text-sm mt-1">
+              {isEditable ? (
+                <span className="text-green-600 font-medium">✓ Editable</span>
+              ) : (
+                <span className="text-gray-500">
+                  Read-only (outside {patientConfig.edit_window_days}-day edit window)
+                </span>
+              )}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           <button
             onClick={handlePrevDay}
@@ -114,7 +149,7 @@ export default function PatientDailyEntryPage() {
         <section id="daily-tracking">
           <h2 className="text-2xl font-bold mb-4">Daily Tracking</h2>
           <div className="space-y-4">
-            <SleepSection data={bundle} />
+            <SleepSection data={bundle} editable={isEditable} />
             <EarlyMorningSection data={bundle} />
             <FoodFluidSection data={bundle} />
             <BowelSection data={bundle} />

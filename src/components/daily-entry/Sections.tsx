@@ -1,5 +1,7 @@
-// Daily Entry Section Components (Read-Only)
+// Daily Entry Section Components
+import { useState, useCallback } from 'react';
 import type { DailyEntryBundle } from '../../types/db';
+import { upsertSleepBlock } from '../../lib/api/dailyEntry';
 
 // Reusable section wrapper
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -20,51 +22,198 @@ function NoData({ message }: { message: string }) {
 // DAILY TRACKING SECTIONS
 // ============================================================================
 
-export function SleepSection({ data }: { data: DailyEntryBundle }) {
+export function SleepSection({ data, editable }: { data: DailyEntryBundle; editable?: boolean }) {
   const sleepBlock = data.sleepBlocks[0]; // Typically one per day
 
-  if (!sleepBlock) {
+  // Helper to extract date and time from ISO string
+  const toDate = (isoString: string | undefined) => {
+    if (!isoString) return '';
+    return new Date(isoString).toISOString().slice(0, 10); // YYYY-MM-DD
+  };
+
+  const toTime = (isoString: string | undefined) => {
+    if (!isoString) return '';
+    return new Date(isoString).toISOString().slice(11, 16); // HH:MM
+  };
+
+  // Local state for editable mode - store date/time separately
+  const [formData, setFormData] = useState({
+    fell_asleep_date: toDate(sleepBlock?.fell_asleep_at),
+    fell_asleep_time: toTime(sleepBlock?.fell_asleep_at),
+    woke_up_date: toDate(sleepBlock?.woke_up_at),
+    woke_up_time: toTime(sleepBlock?.woke_up_at),
+    got_up_date: toDate(sleepBlock?.got_up_at),
+    got_up_time: toTime(sleepBlock?.got_up_at),
+    quality: sleepBlock?.quality || '',
+    feeling_on_waking: sleepBlock?.feeling_on_waking || '',
+    details: sleepBlock?.details || '',
+  });
+
+  // Helper to combine date and time into ISO string
+  const combineDateTime = (date: string, time: string) => {
+    if (!date || !time) return undefined;
+    return new Date(`${date}T${time}`).toISOString();
+  };
+
+  const handleSave = useCallback(async () => {
+    try {
+      await upsertSleepBlock({
+        id: sleepBlock?.id,
+        daily_entry_id: data.dailyEntry.id,
+        patient_id: data.dailyEntry.patient_id,
+        fell_asleep_at: combineDateTime(formData.fell_asleep_date, formData.fell_asleep_time),
+        woke_up_at: combineDateTime(formData.woke_up_date, formData.woke_up_time),
+        got_up_at: combineDateTime(formData.got_up_date, formData.got_up_time),
+        quality: formData.quality || undefined,
+        feeling_on_waking: formData.feeling_on_waking || undefined,
+        details: formData.details || undefined,
+      });
+    } catch (error) {
+      console.error('Failed to save sleep data:', error);
+    }
+  }, [formData, sleepBlock?.id, data.dailyEntry.id, data.dailyEntry.patient_id]);
+
+  if (!editable && !sleepBlock) {
     return <Section title="Sleep"><NoData message="No sleep data logged" /></Section>;
   }
 
   return (
     <Section title="Sleep">
-      <div className="space-y-2 text-sm">
-        {sleepBlock.fell_asleep_at && (
+      {editable ? (
+        <div className="space-y-3">
           <div>
-            <span className="font-medium">Fell asleep:</span>{' '}
-            {new Date(sleepBlock.fell_asleep_at).toLocaleTimeString()}
+            <label className="block text-sm font-medium mb-1">Fell asleep</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={formData.fell_asleep_date}
+                onChange={(e) => setFormData({ ...formData, fell_asleep_date: e.target.value })}
+                onBlur={handleSave}
+                className="flex-1 px-3 py-2 border rounded text-sm"
+              />
+              <input
+                type="time"
+                value={formData.fell_asleep_time}
+                onChange={(e) => setFormData({ ...formData, fell_asleep_time: e.target.value })}
+                onBlur={handleSave}
+                className="w-32 px-3 py-2 border rounded text-sm"
+              />
+            </div>
           </div>
-        )}
-        {sleepBlock.woke_up_at && (
           <div>
-            <span className="font-medium">Woke up:</span>{' '}
-            {new Date(sleepBlock.woke_up_at).toLocaleTimeString()}
+            <label className="block text-sm font-medium mb-1">Woke up</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={formData.woke_up_date}
+                onChange={(e) => setFormData({ ...formData, woke_up_date: e.target.value })}
+                onBlur={handleSave}
+                className="flex-1 px-3 py-2 border rounded text-sm"
+              />
+              <input
+                type="time"
+                value={formData.woke_up_time}
+                onChange={(e) => setFormData({ ...formData, woke_up_time: e.target.value })}
+                onBlur={handleSave}
+                className="w-32 px-3 py-2 border rounded text-sm"
+              />
+            </div>
           </div>
-        )}
-        {sleepBlock.got_up_at && (
           <div>
-            <span className="font-medium">Got up:</span>{' '}
-            {new Date(sleepBlock.got_up_at).toLocaleTimeString()}
+            <label className="block text-sm font-medium mb-1">Got up</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={formData.got_up_date}
+                onChange={(e) => setFormData({ ...formData, got_up_date: e.target.value })}
+                onBlur={handleSave}
+                className="flex-1 px-3 py-2 border rounded text-sm"
+              />
+              <input
+                type="time"
+                value={formData.got_up_time}
+                onChange={(e) => setFormData({ ...formData, got_up_time: e.target.value })}
+                onBlur={handleSave}
+                className="w-32 px-3 py-2 border rounded text-sm"
+              />
+            </div>
           </div>
-        )}
-        {sleepBlock.quality && (
           <div>
-            <span className="font-medium">Quality:</span> {sleepBlock.quality}
+            <label className="block text-sm font-medium mb-1">Quality</label>
+            <select
+              value={formData.quality}
+              onChange={(e) => setFormData({ ...formData, quality: e.target.value })}
+              onBlur={handleSave}
+              className="w-full px-3 py-2 border rounded text-sm"
+            >
+              <option value="">Select...</option>
+              <option value="Excellent">Excellent</option>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+            </select>
           </div>
-        )}
-        {sleepBlock.feeling_on_waking && (
           <div>
-            <span className="font-medium">Feeling on waking:</span> {sleepBlock.feeling_on_waking}
+            <label className="block text-sm font-medium mb-1">Feeling on waking</label>
+            <input
+              type="text"
+              value={formData.feeling_on_waking}
+              onChange={(e) => setFormData({ ...formData, feeling_on_waking: e.target.value })}
+              onBlur={handleSave}
+              placeholder="e.g., Rested, Groggy, Refreshed"
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
           </div>
-        )}
-        {sleepBlock.details && (
-          <div className="mt-2 pt-2 border-t">
-            <span className="font-medium">Details:</span>
-            <p className="text-gray-700 mt-1">{sleepBlock.details}</p>
+          <div>
+            <label className="block text-sm font-medium mb-1">Details (optional)</label>
+            <textarea
+              value={formData.details}
+              onChange={(e) => setFormData({ ...formData, details: e.target.value })}
+              onBlur={handleSave}
+              placeholder="Any additional notes about sleep..."
+              rows={3}
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {sleepBlock?.fell_asleep_at && (
+            <div>
+              <span className="font-medium">Fell asleep:</span>{' '}
+              {new Date(sleepBlock.fell_asleep_at).toLocaleTimeString()}
+            </div>
+          )}
+          {sleepBlock?.woke_up_at && (
+            <div>
+              <span className="font-medium">Woke up:</span>{' '}
+              {new Date(sleepBlock.woke_up_at).toLocaleTimeString()}
+            </div>
+          )}
+          {sleepBlock?.got_up_at && (
+            <div>
+              <span className="font-medium">Got up:</span>{' '}
+              {new Date(sleepBlock.got_up_at).toLocaleTimeString()}
+            </div>
+          )}
+          {sleepBlock?.quality && (
+            <div>
+              <span className="font-medium">Quality:</span> {sleepBlock.quality}
+            </div>
+          )}
+          {sleepBlock?.feeling_on_waking && (
+            <div>
+              <span className="font-medium">Feeling on waking:</span> {sleepBlock.feeling_on_waking}
+            </div>
+          )}
+          {sleepBlock?.details && (
+            <div className="mt-2 pt-2 border-t">
+              <span className="font-medium">Details:</span>
+              <p className="text-gray-700 mt-1">{sleepBlock.details}</p>
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   );
 }

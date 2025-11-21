@@ -74,17 +74,19 @@ export default function PatientTrackerPage() {
     }
   }, [fromDate, toDate]);
 
-  // Fetch data based on active lens
+  // Determine which data type we need (cycle/combined use same data)
+  const needsCycleData = activeLens === 'cycle' || activeLens === 'combined';
+
+  // Fetch data based on active lens - only refetch when data type changes
   useEffect(() => {
     if (fromDate && toDate) {
-      if (activeLens === 'daily') {
-        fetchSummaries();
-      } else {
-        // Cycle and Combined lenses both use cycle data
+      if (needsCycleData) {
         fetchCycleData();
+      } else {
+        fetchSummaries();
       }
     }
-  }, [fromDate, toDate, activeLens, fetchSummaries, fetchCycleData]);
+  }, [fromDate, toDate, needsCycleData, fetchSummaries, fetchCycleData]);
 
   const handleDayClick = (date: string) => {
     setSelectedDate(date);
@@ -100,7 +102,9 @@ export default function PatientTrackerPage() {
     }
   };
 
-  if (loading && !summaries.length) {
+  // Show loading indicator if loading and no data for current lens
+  const hasNoData = needsCycleData ? !cycleData.length : !summaries.length;
+  if (loading && hasNoData) {
     return (
       <div className="p-6">
         <div className="text-center py-12">
@@ -426,20 +430,28 @@ function CombinedLensView({
                 className="flex items-center gap-2 hover:bg-gray-50 p-2 rounded cursor-pointer"
               >
                 <span className="text-xs w-24">{day.date}</span>
-                <div className="flex-1 flex gap-1">
+                <div className="flex-1 space-y-1">
                   {day.energy_physical !== undefined && (
-                    <div
-                      className="bg-purple-400"
-                      style={{ width: `${day.energy_physical * 10}%`, height: '20px' }}
-                      title={`Physical: ${day.energy_physical}`}
-                    />
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs w-8">P:</span>
+                      <div
+                        className="bg-purple-400 rounded"
+                        style={{ width: `${day.energy_physical * 10}%`, height: '16px' }}
+                        title={`Physical: ${day.energy_physical}`}
+                      />
+                      <span className="text-xs">{day.energy_physical}</span>
+                    </div>
                   )}
                   {day.energy_mental !== undefined && (
-                    <div
-                      className="bg-blue-400"
-                      style={{ width: `${day.energy_mental * 10}%`, height: '20px' }}
-                      title={`Mental: ${day.energy_mental}`}
-                    />
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs w-8">M:</span>
+                      <div
+                        className="bg-blue-400 rounded"
+                        style={{ width: `${day.energy_mental * 10}%`, height: '16px' }}
+                        title={`Mental: ${day.energy_mental}`}
+                      />
+                      <span className="text-xs">{day.energy_mental}</span>
+                    </div>
                   )}
                 </div>
               </div>

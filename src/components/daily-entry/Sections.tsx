@@ -1988,6 +1988,7 @@ export function RegimenSection({
 
   // Handler for formulation intake status change
   const handleIntakeStatusChange = useCallback(async (formulationId: string, status: 'taken' | 'skipped' | 'partial') => {
+    const currentNotes = intakeState[formulationId]?.notes;
     setIntakeState((prev) => ({ ...prev, [formulationId]: { ...prev[formulationId], status } }));
     try {
       const existing = formulationIntakes.find((i) => i.regimen_formulation_id === formulationId);
@@ -1997,7 +1998,7 @@ export function RegimenSection({
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
         status,
-        notes: intakeState[formulationId]?.notes || undefined,
+        notes: currentNotes || undefined,
       });
       onRefresh?.();
     } catch (error) {
@@ -2011,16 +2012,17 @@ export function RegimenSection({
   }, []);
 
   const handleIntakeNotesBlur = useCallback(async (formulationId: string) => {
+    const currentStatus = intakeState[formulationId]?.status as 'taken' | 'skipped' | 'partial' | undefined;
+    const currentNotes = intakeState[formulationId]?.notes;
     try {
       const existing = formulationIntakes.find((i) => i.regimen_formulation_id === formulationId);
-      const status = intakeState[formulationId]?.status as 'taken' | 'skipped' | 'partial' | undefined;
       await upsertFormulationIntake({
         id: existing?.id,
         regimen_formulation_id: formulationId,
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
-        status,
-        notes: intakeState[formulationId]?.notes || undefined,
+        status: currentStatus,
+        notes: currentNotes || undefined,
       });
       onRefresh?.();
     } catch (error) {
@@ -2030,6 +2032,7 @@ export function RegimenSection({
 
   // Handler for treatment completion status change
   const handleCompletionStatusChange = useCallback(async (treatmentId: string, status: 'completed' | 'skipped' | 'partial') => {
+    const currentNotes = completionState[treatmentId]?.notes;
     setCompletionState((prev) => ({ ...prev, [treatmentId]: { ...prev[treatmentId], status } }));
     try {
       const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === treatmentId);
@@ -2039,7 +2042,7 @@ export function RegimenSection({
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
         status,
-        notes: completionState[treatmentId]?.notes || undefined,
+        notes: currentNotes || undefined,
       });
       onRefresh?.();
     } catch (error) {
@@ -2053,16 +2056,17 @@ export function RegimenSection({
   }, []);
 
   const handleCompletionNotesBlur = useCallback(async (treatmentId: string) => {
+    const currentStatus = completionState[treatmentId]?.status as 'completed' | 'skipped' | 'partial' | undefined;
+    const currentNotes = completionState[treatmentId]?.notes;
     try {
       const existing = treatmentCompletions.find((c) => c.regimen_treatment_id === treatmentId);
-      const status = completionState[treatmentId]?.status as 'completed' | 'skipped' | 'partial' | undefined;
       await upsertTreatmentCompletion({
         id: existing?.id,
         regimen_treatment_id: treatmentId,
         daily_entry_id: data.dailyEntry.id,
         patient_id: data.dailyEntry.patient_id,
-        status,
-        notes: completionState[treatmentId]?.notes || undefined,
+        status: currentStatus,
+        notes: currentNotes || undefined,
       });
       onRefresh?.();
     } catch (error) {

@@ -365,3 +365,25 @@ export interface DailySummary {
   treatment_adherence_percent: number;
   has_cycle_log: boolean;
 }
+
+export interface CycleDaySummary {
+  date: string;
+  cycle_day?: number;
+  // Cycle-specific data
+  physical_symptom_keys?: string[];
+  emotional_symptom_keys?: string[];
+  bleeding_quantity?: string;
+  blood_color?: string;
+  blood_volume?: string;
+  clots?: boolean;
+  mucus?: boolean;
+  // Energy data for overlays
+  energy_physical?: number;
+  energy_mental?: number;
+  energy_emotional?: number;
+  energy_drive?: number;
+  overall_mood?: number;
+  // Adherence for overlays
+  formulation_adherence_percent: number;
+  treatment_adherence_percent: number;
+}

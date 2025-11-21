@@ -900,3 +900,130 @@ export async function getDailySummaryRange(patientId: string, fromDate: string, 
     handleSupabaseError(error, 'getDailySummaryRange');
   }
 }
+
+/**
+ * Get cycle range data for cycle and combined lenses
+ * Returns cycle logs with daily entry data and adherence for each day
+ */
+export async function getCycleRange(patientId: string, fromDate: string, toDate: string) {
+  try {
+    // Fetch all daily entries in range
+    const { data: dailyEntries, error: entriesError } = await supabase
+      .from('daily_entries')
+      .select('*')
+      .eq('patient_id', patientId)
+      .gte('date', fromDate)
+      .lte('date', toDate)
+      .order('date', { ascending: false });
+
+    if (entriesError) handleSupabaseError(entriesError, 'getCycleRange - daily_entries');
+
+    if (!dailyEntries || dailyEntries.length === 0) {
+      return [];
+    }
+
+    const entryIds = dailyEntries.map((e) => e.id);
+
+    // Fetch cycle logs
+    const { data: cycleLogs, error: cycleError } = await supabase
+      .from('cycle_logs')
+      .select('*')
+      .in('daily_entry_id', entryIds);
+
+    if (cycleError) handleSupabaseError(cycleError, 'getCycleRange - cycle_logs');
+
+    // Fetch formulation intakes for adherence
+    const { data: formIntakes, error: formIntakesError } = await supabase
+      .from('regimen_formulation_intakes')
+      .select('daily_entry_id, status, regimen_formulation_id')
+      .in('daily_entry_id', entryIds);
+
+    if (formIntakesError) handleSupabaseError(formIntakesError, 'getCycleRange - formulation_intakes');
+
+    // Fetch treatment completions for adherence
+    const { data: treatmentComps, error: treatmentCompsError } = await supabase
+      .from('regimen_treatment_completions')
+      .select('daily_entry_id, status, regimen_treatment_id')
+      .in('daily_entry_id', entryIds);
+
+    if (treatmentCompsError) handleSupabaseError(treatmentCompsError, 'getCycleRange - treatment_completions');
+
+    // Get all active formulations/treatments
+    const { data: formulations, error: formulationsError } = await supabase
+      .from('regimen_formulations')
+      .select('id, start_date, stop_date')
+      .eq('patient_id', patientId);
+
+    if (formulationsError) handleSupabaseError(formulationsError, 'getCycleRange - regimen_formulations');
+
+    const { data: treatments, error: treatmentsError } = await supabase
+      .from('regimen_treatments')
+      .select('id, start_date, stop_date')
+      .eq('patient_id', patientId);
+
+    if (treatmentsError) handleSupabaseError(treatmentsError, 'getCycleRange - regimen_treatments');
+
+    // Build summary for each day
+    const summaries = dailyEntries.map((entry) => {
+      const date = entry.date;
+      const cycleLog = (cycleLogs || []).find((c) => c.daily_entry_id === entry.id);
+
+      // Calculate formulation adherence
+      const activeFormulations = (formulations || []).filter((f) => {
+        const startOk = !f.start_date || f.start_date <= date;
+        const stopOk = !f.stop_date || f.stop_date >= date;
+        return startOk && stopOk;
+      });
+
+      const activeFormulationIds = new Set(activeFormulations.map((f) => f.id));
+
+      const formIntakesForDay = (formIntakes || []).filter((i) => i.daily_entry_id === entry.id);
+      const takenFormulations = formIntakesForDay.filter(
+        (i) => activeFormulationIds.has(i.regimen_formulation_id) && (i.status === 'taken' || i.status === 'partial')
+      ).length;
+      const formAdherence = activeFormulations.length > 0
+        ? Math.round((takenFormulations / activeFormulations.length) * 100)
+        : 0;
+
+      // Calculate treatment adherence
+      const activeTreatments = (treatments || []).filter((t) => {
+        const startOk = !t.start_date || t.start_date <= date;
+        const stopOk = !t.stop_date || t.stop_date >= date;
+        return startOk && stopOk;
+      });
+
+      const activeTreatmentIds = new Set(activeTreatments.map((t) => t.id));
+
+      const treatmentCompsForDay = (treatmentComps || []).filter((c) => c.daily_entry_id === entry.id);
+      const completedTreatments = treatmentCompsForDay.filter(
+        (c) => activeTreatmentIds.has(c.regimen_treatment_id) && (c.status === 'completed' || c.status === 'partial')
+      ).length;
+      const treatmentAdherence = activeTreatments.length > 0
+        ? Math.round((completedTreatments / activeTreatments.length) * 100)
+        : 0;
+
+      return {
+        date: entry.date,
+        cycle_day: cycleLog?.cycle_day || entry.cycle_day,
+        physical_symptom_keys: cycleLog?.physical_symptom_keys,
+        emotional_symptom_keys: cycleLog?.emotional_symptom_keys,
+        bleeding_quantity: cycleLog?.bleeding_quantity,
+        blood_color: cycleLog?.blood_color,
+        blood_volume: cycleLog?.blood_volume,
+        clots: cycleLog?.clots,
+        mucus: cycleLog?.mucus,
+        energy_physical: entry.energy_physical,
+        energy_mental: entry.energy_mental,
+        energy_emotional: entry.energy_emotional,
+        energy_drive: entry.energy_drive,
+        overall_mood: entry.overall_mood,
+        formulation_adherence_percent: formAdherence,
+        treatment_adherence_percent: treatmentAdherence,
+      };
+    });
+
+    return summaries;
+  } catch (error) {
+    handleSupabaseError(error, 'getCycleRange');
+  }
+}
